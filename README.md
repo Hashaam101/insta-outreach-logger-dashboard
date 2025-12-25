@@ -1,80 +1,96 @@
-# 📊 InstaCRM - Command Center
+# 📊 InstaCRM Command Center
 
-**The central intelligence and management hub for the Insta Outreach Logger ecosystem.**
+**The decentralized intelligence hub for high-volume Instagram outreach operations.**
 
-![Stack](https://img.shields.io/badge/Stack-Next.js%2016%20|%20React%2019%20|%20Tailwind%204-black?style=flat-square)
-![Database](https://img.shields.io/badge/DB-Oracle%20ATP%20(Thin)-orange?style=flat-square)
-![Status](https://img.shields.io/badge/Status-Build%20Passing-green?style=flat-square)
+![Version](https://img.shields.io/badge/Version-1.0.0-purple?style=flat-square)
+![Next.js](https://img.shields.io/badge/Next.js-16%20(App%20Router)-black?style=flat-square)
+![Oracle](https://img.shields.io/badge/Database-Oracle%20ATP-orange?style=flat-square)
+![Status](https://img.shields.io/badge/Status-Production%20Ready-green?style=flat-square)
 
-## 📖 About The Project
-
-InstaCRM is a high-performance management dashboard designed for distributed outreach teams. It provides real-time visibility into Instagram direct message activity, lead conversion pipelines, and operator performance.
-
-Built with **Next.js 16** and **Oracle ATP**, the system is optimized for speed and security, featuring a stealthy data bridge that logs activity without triggering anti-bot mechanisms.
+## 🌟 The Vision
+InstaCRM is built for distributed teams who need a **stealthy**, reliable way to track DM outreach. While our agents handle the logging on operator machines without triggering Instagram's bot detection, this dashboard provides the "Command Center" view—centralizing performance, analytics, and lead management into a single, high-performance web interface.
 
 ---
 
-## ✨ Core Features
+## ✨ Key Features
 
-### 🚀 Command Center
-- **Live Stats:** Real-time counters for Prospects, Messages, and Team activity.
-- **Activity Feed:** Instant visibility into the latest DMs sent across the entire team.
-- **Identity Gatekeeper:** Secure Google OAuth onboarding with searchable identity claiming.
+### 🚀 Management Dashboard
+*   **Live Operations Feed:** Real-time stream of DMs being sent across the entire team.
+*   **Consolidated Analytics:** Beautifully visualized outreach velocity, team leaderboard, and peak activity heatmaps.
+*   **Identity Gatekeeper:** Secure Google OAuth onboarding with a searchable identity claiming system.
 
-### 📈 Advanced Analytics
-- **Outreach Velocity:** Interactive charts tracking message volume trends.
-- **Performance Leaderboards:** Rank operators and accounts by productivity.
-- **Peak Activity Heatmap:** Visualize the most effective hours for team outreach.
-- **Data Health:** Real-time monitoring of lead enrichment (Emails/Phones found).
+### 🗂️ CRM & Lead Control
+*   **Advanced Leads Explorer:** A rich, searchable data grid for all targets in the system.
+*   **Inline Status Management:** One-click status updates (e.g., Cold -> Warm -> Booked) that sync back to all operator agents.
+*   **Persistence & Notes:** High-fidelity internal notes for every prospect, tagged by operator.
 
-### 🗂️ Lead Management
-- **Leads Explorer:** Global search and filtering of all prospects.
-- **Status Control:** Inline status updates (Cold -> Warm -> Booked).
-- **Notes System:** Internal team commentary per prospect.
+### 🛡️ Secure & Scalable
+*   **Hardened Infrastructure:** Built with strict input validation, rate limiting, and SQL injection protection.
+*   **Oracle Free-Tier Optimized:** Aggressive multi-layer caching ensures the system stays fast while remaining 100% free to host.
 
 ---
 
-## 🛠️ Tech Stack
+## 🏗️ Technical Architecture
 
-- **Framework:** Next.js 16 (App Router)
-- **Database:** Oracle Autonomous Transaction Processing (node-oracledb Thin Mode)
-- **Auth:** Auth.js v5 (Google OAuth)
-- **UI:** Shadcn UI + Tailwind CSS v4
-- **Charts:** Recharts
-- **Caching:** ISR + Request Memoization
+| Layer | Implementation |
+| :--- | :--- |
+| **Framework** | **Next.js 16** + React 19 + TypeScript |
+| **Styling** | **Tailwind CSS v4** + Shadcn UI |
+| **Database** | **Oracle Autonomous Transaction Processing** (Thin Mode) |
+| **Auth** | **Auth.js v5** (Google OAuth Provider) |
+| **Analytics** | **Recharts** (SVG-based high-performance charts) |
+| **Caching** | **Next.js ISR** + Request Memoization |
 
 ---
 
 ## 🗄️ Database Schema
 
-The dashboard synchronizes with the following verified Oracle tables:
+The system synchronizes the following core Oracle tables:
 
-| Table | Primary Key | Description |
+| Table | Role | Key Data Points |
 | :--- | :--- | :--- |
-| **`USERS`** | `EMAIL` | Maps Google IDs to Operator names. |
-| **`OPERATORS`** | `OPERATOR_NAME` | Global directory of team members. |
-| **`ACTORS`** | `USERNAME` | Instagram accounts logging data. |
-| **`PROSPECTS`** | `TARGET_USERNAME` | Master lead database with statuses. |
-| **`OUTREACH_LOGS`** | `LOG_ID` | History of all DMs sent. |
+| **`USERS`** | Auth Mapping | Email, Human Name, Operator ID |
+| **`OPERATORS`** | Directory | Global list of active outreach personas |
+| **`ACTORS`** | Assets | Insta Handles, Owner Operator, Account Status |
+| **`PROSPECTS`** | CRM Core | Target Username, Lead Status, Notes, Contact Data |
+| **`OUTREACH_LOGS`**| Audit Trail | Message Content, Actor, Timestamp |
 
 ---
 
 ## 🚀 Getting Started
 
-1. **Clone & Install:**
-   ```bash
-   npm install
-   ```
+### 1. Prerequisites
+*   Node.js 20+
+*   Oracle ATP Cloud Account
+*   Google Cloud Console Project (for OAuth)
 
-2. **Environment Setup:**
-   Copy `.env.example` to `.env.local` and add your Oracle ATP connection string and Google OAuth credentials.
+### 2. Installation
+```bash
+# Clone the repository
+git clone https://github.com/Hashaam101/insta-outreach-logger-dashboard.git
 
-3. **Run Development:**
-   ```bash
-   npm run dev
-   ```
+# Install dependencies
+npm install
+```
 
-4. **Verify Build:**
-   ```bash
-   npm run build
-   ```
+### 3. Environment Configuration
+Create a `.env.local` file based on `.env.example`:
+*   `ORACLE_CONN_STRING`: Your ATP connection string (Thin Mode format).
+*   `GOOGLE_CLIENT_ID` / `SECRET`: OAuth credentials.
+*   `AUTH_SECRET`: Random 32-character string.
+
+### 4. Deployment
+```bash
+# Run development server
+npm run dev
+
+# Build for production
+npm run build
+```
+
+## 🤝 Contributing
+1. Fork the repository.
+2. Create a feature branch (`git checkout -b feature/amazing-feature`).
+3. Commit your changes (`git commit -m 'Add some amazing feature'`).
+4. Push to the branch (`git push origin feature/amazing-feature`).
+5. Open a Pull Request.
