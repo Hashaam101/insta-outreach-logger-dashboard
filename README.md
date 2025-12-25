@@ -24,6 +24,11 @@ InstaCRM is built for distributed teams who need a **stealthy**, reliable way to
 *   **Inline Status Management:** One-click status updates (e.g., Cold -> Warm -> Booked) that sync back to all operator agents.
 *   **Persistence & Notes:** High-fidelity internal notes for every prospect, tagged by operator.
 
+### 🏛️ Team Governance
+*   **Ownership Transfer:** Securely transfer Actor or Lead ownership between team members.
+*   **Democratic Goals:** Suggest team-wide limits or set personal performance overrides.
+*   **Audit Trails:** Every administrative action is logged for full transparency.
+
 ### 🛡️ Secure & Scalable
 *   **Hardened Infrastructure:** Built with strict input validation, rate limiting, and SQL injection protection.
 *   **Oracle Free-Tier Optimized:** Aggressive multi-layer caching ensures the system stays fast while remaining 100% free to host.

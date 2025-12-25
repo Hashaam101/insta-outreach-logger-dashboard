@@ -8,7 +8,6 @@ import {
   SheetDescription,
   SheetHeader,
   SheetTitle,
-  SheetTrigger,
   SheetFooter
 } from "@/components/ui/sheet"
 import { Textarea } from "@/components/ui/textarea"
@@ -25,24 +24,25 @@ interface Note {
 
 interface NotesSheetProps {
   username: string
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
 }
 
-export function NotesSheet({ username }: NotesSheetProps) {
+export function NotesSheet({ username, open, onOpenChange }: NotesSheetProps) {
   const [notes, setNotes] = useState<Note[]>([]);
   const [newNote, setNewNote] = useState("");
-  const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Fetch notes when sheet opens
   useEffect(() => {
-      if (isOpen) {
+      if (open) {
           setIsLoading(true);
           getLeadNotes(username)
               .then(data => setNotes(data as any))
               .finally(() => setIsLoading(false));
       }
-  }, [isOpen, username]);
+  }, [open, username]);
 
   const handleAddNote = async () => {
       if (!newNote.trim()) return;
@@ -66,20 +66,12 @@ export function NotesSheet({ username }: NotesSheetProps) {
           // Revert if failed
           setNotes(prev => prev.filter(n => n.id !== tempId));
           alert("Failed to save note");
-      } else {
-          // Refresh list to get real ID/timestamp from DB if needed, or just trust optimistic
-          // For now, let's just keep optimistic
       }
       setIsSubmitting(false);
   }
 
   return (
-    <Sheet open={isOpen} onOpenChange={setIsOpen}>
-      <SheetTrigger asChild>
-        <Button variant="ghost" size="icon" title="View Notes">
-            <NotebookPen className="h-4 w-4" />
-        </Button>
-      </SheetTrigger>
+    <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="flex flex-col gap-4">
         <SheetHeader>
           <SheetTitle>Notes for @{username}</SheetTitle>

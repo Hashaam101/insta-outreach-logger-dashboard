@@ -1,56 +1,55 @@
 import NextAuth from 'next-auth';
 import { authConfig } from './auth.config';
-import { dbQuery } from './lib/db';
+import { dbQuery, dbQuerySingleCached } from './lib/db';
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   ...authConfig,
   callbacks: {
     ...authConfig.callbacks,
-    async signIn({ user, account, profile }) {
+    async signIn({ user }) {
       if (!user.email) return false;
 
       try {
-        // Match your DB schema: EMAIL, NAME, OPERATOR_NAME, CREATED_AT
-        const existingUsers = await dbQuery<{ EMAIL: string }>(
+        const existingUser = await dbQuerySingleCached<{ EMAIL: string }>(
           `SELECT email FROM users WHERE email = :email`,
-          { email: user.email }
+          { email: user.email },
+          `user:${user.email}`
         );
 
-        if (existingUsers.length === 0) {
+        if (!existingUser) {
           await dbQuery(
             `INSERT INTO users (email, name) VALUES (:email, :name)`,
-            { 
-              email: user.email,
-              name: user.name || 'Unknown' 
-            }
+            { email: user.email, name: user.name || 'Unknown' }
           );
         }
         return true;
       } catch (error) {
         console.error('SignIn Error:', error);
-        return false;
+        // Allow sign-in even if DB fails - user just won't have operator_name
+        return true;
       }
     },
-    async jwt({ token, user }) {
-        if (token.email) {
-            try {
-                // Fetch only columns that actually exist: OPERATOR_NAME
-                const dbUser = await dbQuery<{ OPERATOR_NAME: string }>(
-                    `SELECT operator_name FROM users WHERE email = :email`,
-                    { email: token.email }
-                );
-                if (dbUser.length > 0) {
-                    token.operator_name = dbUser[0].OPERATOR_NAME;
-                }
-            } catch (error) {
-                console.error('JWT Error:', error);
-            }
+    async jwt({ token }) {
+      if (token.email && !token.operator_name) {
+        try {
+          const dbUser = await dbQuerySingleCached<{ OPERATOR_NAME: string }>(
+            `SELECT operator_name FROM users WHERE email = :email`,
+            { email: token.email },
+            `user:op:${token.email}`
+          );
+          if (dbUser?.OPERATOR_NAME) {
+            token.operator_name = dbUser.OPERATOR_NAME;
+          }
+        } catch (error) {
+          console.error('JWT Error:', error);
+          // Continue without operator_name
         }
-        return token;
+      }
+      return token;
     },
     async session({ session, token }) {
       if (session.user) {
-        session.user.operator_name = token.operator_name as string;
+        session.user.operator_name = (token.operator_name as string) || '';
       }
       return session;
     },

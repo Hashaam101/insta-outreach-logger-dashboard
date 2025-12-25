@@ -45,29 +45,31 @@ The system uses a highly optimized schema designed for high-concurrency and low-
 *   **`OPERATORS`**: The global directory.
     *   `OPERATOR_NAME` (PK): Primary identifier for a team member.
 
-### **B. Outreach & Assets**
-*   **`ACTORS`**: The Instagram accounts performing the work.
-    *   `USERNAME` (PK): The Instagram handle.
-    *   `OWNER_OPERATOR` (FK -> OPERATORS): The person managing this account.
-    *   `STATUS`: (ACTIVE, BANNED, IDLE).
-*   **`ACTOR_PROFILES`**: Performance mapping.
-    *   Tracks assignments between actors and operators over time.
+### **Outreach Tables**
+- **`ACTORS`**: Instagram accounts used for outreach.
+  - `USERNAME` (PK), `OWNER_OPERATOR`, `STATUS`, `CREATED_AT`
+- **`ACTOR_PROFILES`**: Relationship between accounts and operators.
+  - `ACTOR_USERNAME`, `ASSIGNED_OPERATOR`, `CREATED_AT`
+- **`PROSPECTS`**: Master list of leads and their status.
+  - `TARGET_USERNAME` (PK), `STATUS`, `OWNER_ACTOR`, `NOTES`, `FIRST_CONTACTED`, `LAST_UPDATED`, `EMAIL`, `PHONE_NUMBER`, `SOURCE_SUMMARY`
+- **`OUTREACH_LOGS`**: Global history of all messages sent.
+  - `LOG_ID` (PK), `TARGET_USERNAME`, `ACTOR_USERNAME`, `MESSAGE_TEXT`, `CREATED_AT`
 
-### **C. The CRM Core**
-*   **`PROSPECTS`**: The master list of all targeted leads.
-    *   `TARGET_USERNAME` (PK): The lead's handle.
-    *   `STATUS`: (Cold, Contacted, Warm, Booked, Do Not Contact).
-    *   `OWNER_ACTOR` (FK -> ACTORS): Which account found/owns this lead.
-    *   `EMAIL` / `PHONE_NUMBER`: Enriched contact data.
-    *   `SOURCE_SUMMARY`: Where this lead came from (e.g., "Fitness Niche Scrape").
-    *   `LAST_UPDATED`: Used by the Sync Engine for delta pulls.
-*   **`OUTREACH_LOGS`**: Every DM sent is a row here.
-    *   `LOG_ID`: Auto-incrementing ID.
-    *   `TARGET_USERNAME`, `ACTOR_USERNAME`, `MESSAGE_TEXT`, `CREATED_AT`.
-*   **`NOTES`**: High-fidelity CRM commentary.
-    *   `ID` (PK), `USERNAME` (FK), `NOTE_TEXT`, `OPERATOR_NAME`.
+### **Governance & Audit (New)**
+- **`TEAM_GOALS`**: Shared suggested limits (e.g., MAX_DAILY_DMS).
+- **`OPERATOR_GOALS`**: Personal overrides for team goals.
+- **`AUDIT_LOGS`**: Detailed history of administrative actions (transfers, goal changes).
 
 ---
+
+## 🗓️ Development Status
+- **Auth & Identity**: Fully implemented with searchable onboarding.
+- **Core Dashboard**: Live stats, real-time activity feed, and performance charts.
+- **Leads Management**: Server-side search, status updates, and notes.
+- **Analytics**: Dynamic time-range tracking (7D/30D/90D) and peak activity heatmaps.
+- **Governance**: Server actions for Actor/Lead transfers and Democratic Goal setting.
+- **Optimization**: Passing production build with full caching and rate limiting.
+
 
 ## ⚡ 4. Next.js 16 Implementation Details
 

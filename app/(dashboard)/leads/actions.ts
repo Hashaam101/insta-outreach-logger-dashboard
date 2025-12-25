@@ -1,8 +1,8 @@
 'use server';
 
 import { auth } from "@/auth";
-import { dbQuery } from "@/lib/db";
-import { revalidatePath } from "next/cache";
+import { dbQuery, dbQueryCached, invalidateCache } from "@/lib/db";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { rateLimit } from "@/lib/ratelimit";
 import { z } from "zod";
 
@@ -28,6 +28,7 @@ export async function refreshData() {
     if (!success) throw new Error("Rate limit exceeded. Please wait a minute.");
 
     try {
+        // Purge the entire dashboard cache
         revalidatePath("/", "layout");
         return { success: true, timestamp: new Date().toISOString() };
     } catch (error) {
@@ -55,6 +56,8 @@ export async function updateLeadStatus(username: string, newStatus: string) {
       { status: validated.status, username: validated.username }
     );
     
+    invalidateCache('status');
+    invalidateCache('metrics');
     revalidatePath('/leads');
     return { success: true };
   } catch (error) {
@@ -108,6 +111,21 @@ export async function getLeadNotes(username: string) {
         }));
     } catch (error) {
         console.error("Failed to fetch notes:", error);
+        return [];
+    }
+}
+
+/**
+ * Fetch all actors for transfer dropdown
+ */
+export async function getActors() {
+    try {
+        return await dbQueryCached<{ USERNAME: string }>(
+            `SELECT username FROM actors WHERE status = 'ACTIVE' ORDER BY username ASC`,
+            {},
+            'actors:active'
+        );
+    } catch {
         return [];
     }
 }

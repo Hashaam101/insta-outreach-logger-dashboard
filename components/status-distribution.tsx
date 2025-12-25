@@ -1,8 +1,13 @@
 import { Badge } from "@/components/ui/badge";
 import { getCachedStatusDistribution } from "@/lib/data";
 
-export async function StatusDistribution() {
-    const data = await getCachedStatusDistribution();
+interface StatusDistributionProps {
+    operatorName?: string
+}
+
+export async function StatusDistribution({ operatorName }: StatusDistributionProps) {
+    const data = await getCachedStatusDistribution(operatorName);
+    const maxCount = Math.max(...data.map((d: any) => Number(d.COUNT) || 0), 1);
 
     const getStatusColor = (status: string) => {
         const s = status.toLowerCase();
@@ -24,7 +29,7 @@ export async function StatusDistribution() {
                         <div className="w-24 h-1.5 bg-primary/5 rounded-full overflow-hidden hidden sm:block">
                             <div 
                                 className="h-full bg-primary/40 rounded-full" 
-                                style={{ width: `${Math.min(100, (item.COUNT / 69) * 100)}%` }} 
+                                style={{ width: `${Math.min(100, (item.COUNT / maxCount) * 100)}%` }} 
                             />
                         </div>
                         <Badge variant="outline" className={getStatusColor(item.STATUS || "")}>

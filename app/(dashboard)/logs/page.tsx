@@ -1,9 +1,9 @@
 import { DataTable } from "@/components/ui/data-table";
 import { columns, OutreachLog } from "./columns";
-import { dbQuery } from "@/lib/db";
+import { dbQuery, dbQueryCached } from "@/lib/db";
 import { MessageSquare, Download, Filter } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { LeadsFilter } from "@/components/leads/leads-filter"; // Reusing the filter component
+import { LeadsFilter } from "@/components/leads/leads-filter";
 
 async function getLogs(query?: string): Promise<OutreachLog[]> {
   try {
@@ -15,8 +15,12 @@ async function getLogs(query?: string): Promise<OutreachLog[]> {
         ORDER BY l.CREATED_AT DESC
       `;
       const params = query ? { q: `%${query.toLowerCase()}%` } : {};
-      const rows = await dbQuery<any>(sql, params);
-      
+
+      // Use cached query for initial load (no search), regular query for searches
+      const rows = query
+          ? await dbQuery<any>(sql, params)
+          : await dbQueryCached<any>(sql, {}, 'logs:all');
+
       return rows.map(r => ({
           log_id: r.LOG_ID,
           target_username: r.TARGET_USERNAME,
@@ -44,12 +48,12 @@ export default async function LogsPage({
     <div className="space-y-8 pb-10">
       {/* Header Area */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div className="space-y-1">
-            <div className="flex items-center gap-2 text-primary font-bold text-xs uppercase tracking-[0.2em]">
-                <MessageSquare className="h-3 w-3" />
-                Audit Trail
+        <div className="space-y-2">
+            <div className="flex items-center gap-2 text-primary/80 text-xs font-medium tracking-wide">
+                <MessageSquare className="h-3.5 w-3.5" />
+                <span>Audit Trail</span>
             </div>
-            <h1 className="text-3xl font-extrabold tracking-tight">Outreach Logs</h1>
+            <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">Activity Logs</h1>
             <p className="text-muted-foreground text-sm">
                 A complete history of all direct messages sent by the team.
             </p>
