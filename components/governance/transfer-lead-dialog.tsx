@@ -1,8 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { ArrowLeftRight, Instagram, Loader2, Search } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import { Instagram, Loader2 } from "lucide-react"
 import {
   Dialog,
   DialogContent,

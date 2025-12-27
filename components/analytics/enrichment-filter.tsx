@@ -25,8 +25,6 @@ export function EnrichmentFilter() {
     router.push(`/analytics?${params.toString()}`)
   }
 
-  const selectedOption = RANGE_OPTIONS.find(o => o.value === currentRange)
-
   return (
     <div className="flex items-center gap-2">
       <Calendar className="h-4 w-4 text-primary" />

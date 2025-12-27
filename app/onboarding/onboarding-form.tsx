@@ -37,7 +37,6 @@ export function OnboardingForm({ initialOperators }: { initialOperators: Operato
   
   // Find selected operator
   const selectedOperator = operators.find((op) => op.name.toLowerCase() === value.toLowerCase())
-  const exactMatch = operators.find((op) => op.name.toLowerCase() === searchValue.toLowerCase())
 
   const handleSelect = async (name: string) => {
     setIsPending(true)
@@ -81,7 +80,7 @@ export function OnboardingForm({ initialOperators }: { initialOperators: Operato
                 <CommandEmpty className="p-4">
                     <div className="flex flex-col items-center gap-2 text-center">
                         <UserPlus className="h-8 w-8 text-primary opacity-50" />
-                        <p className="text-sm font-medium">No operator found for "{searchValue}"</p>
+                        <p className="text-sm font-medium">No operator found for &quot;{searchValue}&quot;</p>
                         <Button 
                             size="sm" 
                             className="mt-2"
@@ -90,7 +89,7 @@ export function OnboardingForm({ initialOperators }: { initialOperators: Operato
                                 setOpen(false)
                             }}
                         >
-                            Create "{searchValue}"
+                            Create &quot;{searchValue}&quot;
                         </Button>
                     </div>
                 </CommandEmpty>

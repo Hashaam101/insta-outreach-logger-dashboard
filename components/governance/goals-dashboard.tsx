@@ -15,37 +15,21 @@ import {
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { 
     setPersonalGoal, 
-    suggestTeamGoal 
+    suggestTeamGoal,
+    Goal,
+    AuditLogEntry
 } from "@/app/actions/governance"
 import { toast } from "sonner"
-import { cn } from "@/lib/utils"
-
-interface Goal {
-    key: string
-    description: string
-    teamValue: number
-    suggestedBy: string
-    updatedAt: string
-    personalValue: number | null
-}
-
-interface AuditLog {
-    by: string
-    target: string
-    details: { value: number }
-    at: string
-}
 
 export function GoalsDashboard({ 
     initialGoals, 
     recentLogs 
 }: { 
     initialGoals: Goal[], 
-    recentLogs: AuditLog[] 
+    recentLogs: AuditLogEntry[] 
 }) {
     const [goals, setGoals] = React.useState(initialGoals)
     const [editingKey, setEditingKey] = React.useState<string | null>(null)

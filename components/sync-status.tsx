@@ -45,7 +45,7 @@ export function SyncStatus() {
       
       <div className="flex items-center gap-2">
           <Database className="h-3 w-3 text-muted-foreground" />
-          <span className="text-[11px] font-black text-foreground/80 leading-none">
+          <span className="text-[11px] font-semibold text-foreground/80 leading-none">
               Synced: <span className="text-primary font-bold">{lastSync}</span>
           </span>
       </div>

@@ -5,7 +5,6 @@ import { redirect } from "next/navigation";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { SidebarWrapper } from "@/components/sidebar-wrapper";
 
 export default async function DashboardLayout({
   children,
@@ -27,7 +26,9 @@ export default async function DashboardLayout({
     <SidebarProvider>
       <div className="flex min-h-screen bg-background text-foreground overflow-hidden">
         {/* Desktop Sidebar */}
-        <SidebarWrapper session={session} />
+        <div className="hidden lg:block w-64 shrink-0 border-r">
+          <Sidebar session={session} />
+        </div>
 
         <div className="flex-1 flex flex-col min-w-0">
           {/* Mobile Header */}

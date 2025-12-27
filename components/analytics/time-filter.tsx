@@ -16,11 +16,10 @@ export function TimeFilter() {
   }
 
   return (
-    <div className="flex items-center gap-4 bg-card/40 p-1.5 rounded-xl border border-primary/10 backdrop-blur-sm">
-      <div className="flex items-center gap-2 px-3 border-r border-primary/10">
-          <Calendar className="h-4 w-4 text-primary opacity-70" />
-          <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-tighter">Timeframe</span>
-      </div>
+    <div className="flex items-center gap-4 bg-card/50 backdrop-blur-md p-1.5 rounded-2xl border border-primary/10 shadow-lg">
+        <div className="flex items-center gap-2 px-3 border-r border-primary/10">
+            <span className="text-[10px] uppercase font-bold text-muted-foreground">Timeframe</span>
+        </div>
       <Tabs value={currentRange} onValueChange={setRange} className="w-auto">
         <TabsList className="bg-transparent h-8">
           <TabsTrigger value="7" className="text-[10px] h-7 px-4 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">7D</TabsTrigger>

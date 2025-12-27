@@ -15,7 +15,7 @@ import Link from "next/link";
 import { TeamGoalsWidget } from "@/components/dashboard/TeamGoalsWidget";
 import { OperatorStats } from "@/components/dashboard/OperatorStats";
 import { ViewToggle } from "@/components/ui/view-toggle";
-import { getCachedOperatorStats } from "@/lib/data";
+import { getCachedOperatorStats, OperatorStatsData } from "@/lib/data";
 
 export default async function DashboardPage({
     searchParams,
@@ -24,98 +24,92 @@ export default async function DashboardPage({
 }) {
   const session = await auth();
   const params = await searchParams;
-  const view = params?.view || "my";
+  const view = params?.view || "team";
   
   const currentOperator = session?.user?.operator_name || "";
   const filterByOperator = view === "my" ? currentOperator : undefined;
 
   // Personal performance hub always uses the session operator
-  const operatorStats = await getCachedOperatorStats(currentOperator);
+  const operatorStats = await getCachedOperatorStats(currentOperator) as OperatorStatsData;
 
   return (
-    <div className="space-y-8 pb-8">
+    <div className="space-y-8 md:space-y-10 pb-10">
       {/* Header Section */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div className="space-y-2">
-            <div className="flex items-center gap-2 text-primary/80 text-xs font-medium tracking-wide">
-                <Sparkles className="h-3.5 w-3.5" />
-                <span>Dashboard</span>
+        <div className="space-y-1">
+            <div className="flex items-center gap-2 text-primary font-bold text-xs uppercase tracking-[0.2em]">
+                <Sparkles className="h-3 w-3" />
+                Management Console
             </div>
-            <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">
+            <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight">
                 Command Center
             </h1>
-            <p className="text-muted-foreground text-sm">
-                {view === "my"
-                    ? "Your personal outreach performance"
-                    : "Team-wide intelligence overview"}
+            <p className="text-muted-foreground text-sm max-w-md">
+                {view === "my" 
+                    ? `Viewing your personal outreach performance.` 
+                    : "Comprehensive intelligence from the entire fleet."}
             </p>
         </div>
-
+        
         <div className="flex flex-wrap items-center gap-3">
             <ViewToggle />
             <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm" className="h-9 gap-2" asChild>
+                <Button variant="outline" size="sm" className="bg-card/40 border-primary/10 hover:bg-primary/5 gap-2 rounded-xl h-9" asChild>
                     <Link href="/logs">
-                        <History className="h-4 w-4" />
-                        <span className="hidden sm:inline">Logs</span>
+                        <History className="h-4 w-4" /> <span className="hidden sm:inline">Logs</span>
                     </Link>
                 </Button>
-                <Button size="sm" className="h-9 gap-2" asChild>
+                <Button size="sm" className="shadow-lg shadow-primary/20 gap-2 rounded-xl h-9" asChild>
                     <Link href="/leads">
-                        <span className="hidden sm:inline">Leads</span>
-                        <ArrowRight className="h-4 w-4" />
+                        <span className="hidden sm:inline">Leads</span> <ArrowRight className="h-4 w-4" />
                     </Link>
                 </Button>
             </div>
         </div>
       </div>
-
+      
       {/* Stats Section */}
       <StatsGrid operatorName={filterByOperator} />
 
-      <div className="grid gap-5 grid-cols-1 lg:grid-cols-12">
+      <div className="grid gap-6 grid-cols-1 lg:grid-cols-12">
         {/* Left Column: Governance & My Stats */}
-        <div className="order-2 lg:order-1 lg:col-span-7 space-y-5">
-            <OperatorStats data={operatorStats as any} />
+        <div className="order-2 lg:order-1 lg:col-span-7 space-y-6">
+            <OperatorStats data={operatorStats} />
             <TeamGoalsWidget />
         </div>
 
         {/* Right Column: Distribution & Rankings */}
-        <div className="order-1 lg:order-2 lg:col-span-5 space-y-5">
+        <div className="order-1 lg:order-2 lg:col-span-5 space-y-6">
             {/* Status Distribution */}
-            <Card className="border-border/50 bg-card/80 backdrop-blur-sm overflow-hidden">
-                <CardHeader className="pb-4 border-b border-border/50">
-                    <div className="flex items-center gap-3">
-                        <div className="p-2 rounded-lg bg-primary/10">
-                            <PieChart className="h-4 w-4 text-primary" />
-                        </div>
+            <Card className="border-primary/10 bg-card/40 backdrop-blur-sm border-2 rounded-2xl">
+                <CardHeader className="pb-3 border-b border-primary/5 bg-primary/5">
+                    <div className="flex items-center gap-2">
+                        <PieChart className="h-4 w-4 text-primary" />
                         <div>
-                            <CardTitle className="text-sm font-medium">Pipeline Health</CardTitle>
-                            <CardDescription className="text-xs">
-                                {view === "my" ? "Your active leads" : "Team distribution"}
+                            <CardTitle className="text-sm">Pipeline Health</CardTitle>
+                            <CardDescription className="text-[10px]">
+                                {view === "my" ? "Your active leads" : "Global team distribution"}
                             </CardDescription>
                         </div>
                     </div>
                 </CardHeader>
-                <CardContent className="pt-5">
+                <CardContent className="pt-6">
                     <StatusDistribution operatorName={filterByOperator} />
                 </CardContent>
             </Card>
 
             {/* Top Actors */}
-            <Card className="border-border/50 bg-card/80 backdrop-blur-sm overflow-hidden">
-                <CardHeader className="pb-4 border-b border-border/50">
-                    <div className="flex items-center gap-3">
-                        <div className="p-2 rounded-lg bg-primary/10">
-                            <Target className="h-4 w-4 text-primary" />
-                        </div>
+            <Card className="border-primary/10 bg-card/40 backdrop-blur-sm border-2 rounded-2xl">
+                <CardHeader className="pb-3 border-b border-primary/5 bg-primary/5">
+                    <div className="flex items-center gap-2">
+                        <Target className="h-4 w-4 text-primary" />
                         <div>
-                            <CardTitle className="text-sm font-medium">Top Performers</CardTitle>
-                            <CardDescription className="text-xs">Activity leaderboard</CardDescription>
+                            <CardTitle className="text-sm">Asset Ranking</CardTitle>
+                            <CardDescription className="text-[10px]">Instagram Activity Leaderboard</CardDescription>
                         </div>
                     </div>
                 </CardHeader>
-                <CardContent className="pt-5">
+                <CardContent className="pt-6">
                     <TopActors />
                 </CardContent>
             </Card>

@@ -1,9 +1,8 @@
 'use server';
 
 import { auth } from "@/auth";
-import { dbQuery, dbQueryCached, invalidateCache } from "@/lib/db";
+import { dbQuery } from "@/lib/db";
 import { revalidatePath } from "next/cache";
-import { z } from "zod";
 
 /**
  * UTILITY: Log an action to the AUDIT_LOGS table
@@ -56,56 +55,14 @@ export async function transferActor(actorHandle: string, newOperatorName: string
 
         revalidatePath('/settings');
         return { success: true };
-    } catch (e: any) {
-        return { success: false, error: e.message };
+    } catch (e: unknown) {
+        const err = e as Error;
+        return { success: false, error: err.message };
     }
 }
 
 /**
- * 2. Update Actor Status
- * Updates the STATUS in the ACTORS table.
- */
-export async function updateActorStatus(actorHandle: string, newStatus: string) {
-    const session = await auth();
-    if (!session?.user?.operator_name) throw new Error("Unauthorized");
-
-    // Validate status
-    const validStatuses = ['ACTIVE', 'PAUSED', 'SUSPENDED', 'BANNED'];
-    if (!validStatuses.includes(newStatus)) {
-        return { success: false, error: "Invalid status" };
-    }
-
-    try {
-        const current = await dbQuery<{ STATUS: string }>(
-            `SELECT status FROM actors WHERE username = :handle`,
-            { handle: actorHandle }
-        );
-
-        if (current.length === 0) throw new Error("Actor not found");
-
-        await dbQuery(
-            `UPDATE actors SET status = :status WHERE username = :handle`,
-            { status: newStatus, handle: actorHandle }
-        );
-
-        invalidateCache('actors');
-
-        await logAudit(
-            session.user.operator_name,
-            'UPDATE_ACTOR_STATUS',
-            actorHandle,
-            { from: current[0].STATUS, to: newStatus }
-        );
-
-        revalidatePath('/actors');
-        return { success: true };
-    } catch (e: any) {
-        return { success: false, error: e.message };
-    }
-}
-
-/**
- * 3. Transfer Lead Ownership
+ * 2. Transfer Lead Ownership
  * Updates the OWNER_ACTOR in the PROSPECTS table.
  */
 export async function transferLead(targetUsername: string, newActorHandle: string) {
@@ -134,8 +91,9 @@ export async function transferLead(targetUsername: string, newActorHandle: strin
 
         revalidatePath('/leads');
         return { success: true };
-    } catch (e: any) {
-        return { success: false, error: e.message };
+    } catch (e: unknown) {
+        const err = e as Error;
+        return { success: false, error: err.message };
     }
 }
 
@@ -168,9 +126,11 @@ export async function suggestTeamGoal(key: string, value: number, description: s
         await logAudit(session.user.operator_name, 'UPDATE_TEAM_GOAL', key, { value });
 
         revalidatePath('/analytics');
+        revalidatePath('/');
         return { success: true };
-    } catch (e: any) {
-        return { success: false, error: e.message };
+    } catch (e: unknown) {
+        const err = e as Error;
+        return { success: false, error: err.message };
     }
 }
 
@@ -199,23 +159,40 @@ export async function setPersonalGoal(key: string, value: number) {
         });
 
         revalidatePath('/analytics');
+        revalidatePath('/');
         return { success: true };
-    } catch (e: any) {
-        return { success: false, error: e.message };
+    } catch (e: unknown) {
+        const err = e as Error;
+        return { success: false, error: err.message };
     }
+}
+
+export interface Goal {
+    key: string;
+    description: string;
+    teamValue: number;
+    suggestedBy: string;
+    updatedAt: string;
+    personalValue: number | null;
 }
 
 /**
  * 5. Get Goals Dashboard Data
  * Returns a merged view of Team vs Personal goals.
  */
-export async function getGoalsDashboardData() {
+export async function getGoalsDashboardData(): Promise<Goal[] | null> {
     const session = await auth();
     if (!session?.user?.operator_name) return null;
 
     try {
-        // Query both tables joined on Goal Key for the current operator
-        const goals = await dbQuery(`
+        const goals = await dbQuery<{
+            GOAL_KEY: string;
+            DESCRIPTION: string;
+            SUGGESTED_VALUE: string | number;
+            SUGGESTED_BY: string;
+            UPDATED_AT: string;
+            PERSONAL_VALUE: string | number | null;
+        }>(`
             SELECT 
                 t.goal_key, 
                 t.description, 
@@ -228,13 +205,13 @@ export async function getGoalsDashboardData() {
             ORDER BY t.goal_key ASC
         `, { op: session.user.operator_name });
 
-        return goals.map((g: any) => ({
+        return goals.map((g) => ({
             key: g.GOAL_KEY,
             description: g.DESCRIPTION,
-            teamValue: g.SUGGESTED_VALUE,
+            teamValue: Number(g.SUGGESTED_VALUE),
             suggestedBy: g.SUGGESTED_BY,
             updatedAt: g.UPDATED_AT,
-            personalValue: g.PERSONAL_VALUE
+            personalValue: g.PERSONAL_VALUE !== null ? Number(g.PERSONAL_VALUE) : null
         }));
     } catch (e) {
         console.error("Goals fetch failed:", e);
@@ -242,12 +219,26 @@ export async function getGoalsDashboardData() {
     }
 }
 
+export interface AuditLogEntry {
+    by: string;
+    type: string;
+    target: string;
+    details: { value: number };
+    at: string;
+}
+
 /**
  * 6. Get Recent Goal Changes
  */
-export async function getRecentGoalChanges() {
+export async function getRecentGoalChanges(): Promise<AuditLogEntry[]> {
     try {
-        const logs = await dbQuery(`
+        const logs = await dbQuery<{
+            PERFORMED_BY: string;
+            ACTION_TYPE: string;
+            TARGET_ID: string;
+            DETAILS_JSON: string;
+            TIMESTAMP: string;
+        }>(`
             SELECT performed_by, action_type, target_id, details_json, timestamp
             FROM audit_logs
             WHERE action_type = 'UPDATE_TEAM_GOAL'
@@ -255,14 +246,14 @@ export async function getRecentGoalChanges() {
             FETCH FIRST 5 ROWS ONLY
         `);
 
-        return logs.map((l: any) => ({
+        return logs.map((l) => ({
             by: l.PERFORMED_BY,
             type: l.ACTION_TYPE,
             target: l.TARGET_ID,
             details: JSON.parse(l.DETAILS_JSON),
             at: l.TIMESTAMP
         }));
-    } catch (e) {
+    } catch {
         return [];
     }
 }

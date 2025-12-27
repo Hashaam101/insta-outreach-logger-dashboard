@@ -1,8 +1,8 @@
 'use server';
 
 import { auth } from "@/auth";
-import { dbQuery, dbQueryCached, invalidateCache } from "@/lib/db";
-import { revalidatePath, revalidateTag } from "next/cache";
+import { dbQuery } from "@/lib/db";
+import { revalidatePath } from "next/cache";
 import { rateLimit } from "@/lib/ratelimit";
 import { z } from "zod";
 
@@ -31,7 +31,7 @@ export async function refreshData() {
         // Purge the entire dashboard cache
         revalidatePath("/", "layout");
         return { success: true, timestamp: new Date().toISOString() };
-    } catch (error) {
+    } catch {
         return { success: false };
     }
 }
@@ -47,8 +47,6 @@ export async function updateLeadStatus(username: string, newStatus: string) {
   // Validate Input (Prevents SQL Injection via malformed strings)
   const validated = StatusSchema.parse({ username, status: newStatus });
 
-  const operatorName = session.user.operator_name || 'Unknown';
-
   try {
     // SECURITY: Always use bind variables (:status, :username) - NEVER use string interpolation
     await dbQuery(
@@ -56,8 +54,6 @@ export async function updateLeadStatus(username: string, newStatus: string) {
       { status: validated.status, username: validated.username }
     );
     
-    invalidateCache('status');
-    invalidateCache('metrics');
     revalidatePath('/leads');
     return { success: true };
   } catch (error) {
@@ -120,11 +116,7 @@ export async function getLeadNotes(username: string) {
  */
 export async function getActors() {
     try {
-        return await dbQueryCached<{ USERNAME: string }>(
-            `SELECT username FROM actors WHERE status = 'ACTIVE' ORDER BY username ASC`,
-            {},
-            'actors:active'
-        );
+        return await dbQuery<{ USERNAME: string }>(`SELECT username FROM actors WHERE status = 'ACTIVE' ORDER BY username ASC`);
     } catch {
         return [];
     }

@@ -1,13 +1,12 @@
 import { Badge } from "@/components/ui/badge";
-import { getCachedStatusDistribution } from "@/lib/data";
+import { getCachedStatusDistribution, StatusDistributionData } from "@/lib/data";
 
 interface StatusDistributionProps {
     operatorName?: string
 }
 
 export async function StatusDistribution({ operatorName }: StatusDistributionProps) {
-    const data = await getCachedStatusDistribution(operatorName);
-    const maxCount = Math.max(...data.map((d: any) => Number(d.COUNT) || 0), 1);
+    const data = await getCachedStatusDistribution(operatorName) as StatusDistributionData[];
 
     const getStatusColor = (status: string) => {
         const s = status.toLowerCase();
@@ -19,7 +18,7 @@ export async function StatusDistribution({ operatorName }: StatusDistributionPro
 
     return (
         <div className="space-y-4">
-            {data.map((item: any) => (
+            {data.map((item) => (
                 <div key={item.STATUS} className="flex items-center justify-between group">
                     <div className="flex items-center gap-3">
                         <div className="h-2 w-2 rounded-full bg-primary/40 group-hover:bg-primary transition-colors" />
@@ -29,7 +28,7 @@ export async function StatusDistribution({ operatorName }: StatusDistributionPro
                         <div className="w-24 h-1.5 bg-primary/5 rounded-full overflow-hidden hidden sm:block">
                             <div 
                                 className="h-full bg-primary/40 rounded-full" 
-                                style={{ width: `${Math.min(100, (item.COUNT / maxCount) * 100)}%` }} 
+                                style={{ width: `${Math.min(100, (Number(item.COUNT) / 69) * 100)}%` }} 
                             />
                         </div>
                         <Badge variant="outline" className={getStatusColor(item.STATUS || "")}>

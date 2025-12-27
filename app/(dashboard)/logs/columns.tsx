@@ -1,7 +1,6 @@
 "use client"
 
 import { ColumnDef } from "@tanstack/react-table"
-import { Badge } from "@/components/ui/badge"
 import { Calendar, Instagram, User, MessageSquare } from "lucide-react"
 
 export type OutreachLog = {
@@ -63,7 +62,7 @@ export const columns: ColumnDef<OutreachLog>[] = [
         <div className="flex items-start gap-2 bg-primary/5 p-2 rounded-lg border border-primary/10 max-w-[400px]">
             <MessageSquare className="h-3 w-3 text-primary/50 mt-0.5 shrink-0" />
             <p className="text-xs italic text-muted-foreground line-clamp-2 leading-relaxed">
-                "{row.getValue("message_text")}"
+                &quot;{row.getValue("message_text")}&quot;
             </p>
         </div>
     )

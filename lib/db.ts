@@ -1,23 +1,25 @@
 import oracledb from 'oracledb';
-import type { Pool, Connection } from 'oracledb';
 import { env } from './env';
 import { LRUCache } from 'lru-cache';
 
 // oracledb 6.x uses Thin mode by default (pure JS, no Oracle Client needed)
 // Configure for stability
 oracledb.outFormat = oracledb.OUT_FORMAT_OBJECT;
-(oracledb as any).autoCommit = true;
+oracledb.autoCommit = true;
+
+// CRITICAL: Fetch numbers as strings to avoid Thin mode buffer alignment issues.
+oracledb.fetchAsString = [oracledb.NUMBER];
 
 // In-memory cache (5 min TTL)
-const queryCache = new LRUCache<string, any>({
+const queryCache = new LRUCache<string, unknown>({
   max: 200,
   ttl: 1000 * 60 * 5,
 });
 
-let pool: Pool | null = null;
-let poolCreating: Promise<Pool> | null = null;
+let pool: oracledb.Pool | null = null;
+let poolCreating: Promise<oracledb.Pool> | null = null;
 
-async function getPool(): Promise<Pool> {
+async function getPool(): Promise<oracledb.Pool> {
   if (pool) return pool;
 
   // Prevent multiple simultaneous pool creations
@@ -28,9 +30,7 @@ async function getPool(): Promise<Pool> {
     const connStr = (env.ORACLE_CONN_STRING || '').replace(/\s+/g, '');
 
     console.log('🔌 Connecting to Oracle...');
-    console.log('   User:', env.ORACLE_USER);
-    console.log('   ConnStr length:', connStr.length);
-
+    
     pool = await oracledb.createPool({
       user: env.ORACLE_USER,
       password: env.ORACLE_PASSWORD,
@@ -52,31 +52,32 @@ async function getPool(): Promise<Pool> {
  */
 export async function dbQuery<T = Record<string, unknown>>(
   sql: string,
-  params: Record<string, any> = {},
+  params: Record<string, unknown> = {},
   retries = 2
 ): Promise<T[]> {
   let lastError: Error | null = null;
 
   for (let attempt = 0; attempt <= retries; attempt++) {
-    let conn: Connection | undefined;
+    let conn: oracledb.Connection | undefined;
 
     try {
       const dbPool = await getPool();
       conn = await dbPool.getConnection();
 
       // Very conservative settings to avoid buffer issues in Thin mode
-      const result = await conn.execute(sql, params, {
+      const result = await conn.execute<T>(sql, params, {
         outFormat: oracledb.OUT_FORMAT_OBJECT,
-        fetchArraySize: 100, // Increased for stability
-        prefetchRows: 0,    // MUST BE 0 to avoid many internal buffer pre-allocation bugs
+        fetchArraySize: 100, 
+        prefetchRows: 0,    
       });
 
       return (result.rows || []) as T[];
-    } catch (error: any) {
-      lastError = error;
+    } catch (error: unknown) {
+      const err = error as { code?: string; message?: string };
+      lastError = err as Error;
 
       // On buffer error, close connection and retry
-      if (error.code === 'ERR_BUFFER_OUT_OF_BOUNDS') {
+      if (err.code === 'ERR_BUFFER_OUT_OF_BOUNDS') {
         console.warn(`⚠️ Buffer error on attempt ${attempt + 1}, retrying...`);
         if (conn) {
           try { await conn.close(); conn = undefined; } catch {}
@@ -85,8 +86,8 @@ export async function dbQuery<T = Record<string, unknown>>(
         continue;
       }
 
-      console.error('❌ DB Error:', error.message);
-      throw error;
+      console.error('❌ DB Error:', err.message);
+      throw err;
     } finally {
       if (conn) {
         try { await conn.close(); } catch {}
@@ -102,7 +103,7 @@ export async function dbQuery<T = Record<string, unknown>>(
  */
 export async function dbQueryCached<T = Record<string, unknown>>(
   sql: string,
-  params: Record<string, any> = {},
+  params: Record<string, unknown> = {},
   cacheKey?: string
 ): Promise<T[]> {
   const key = cacheKey || `q:${sql}:${JSON.stringify(params)}`;
@@ -115,7 +116,6 @@ export async function dbQueryCached<T = Record<string, unknown>>(
     queryCache.set(key, result);
     return result;
   } catch (error) {
-    // Return empty array on error for cached queries
     console.error('Query failed, returning empty:', error);
     return [];
   }
@@ -126,7 +126,7 @@ export async function dbQueryCached<T = Record<string, unknown>>(
  */
 export async function dbQuerySingle<T = Record<string, unknown>>(
   sql: string,
-  params: Record<string, any> = {}
+  params: Record<string, unknown> = {}
 ): Promise<T | null> {
   const rows = await dbQuery<T>(sql, params);
   return rows[0] || null;
@@ -137,7 +137,7 @@ export async function dbQuerySingle<T = Record<string, unknown>>(
  */
 export async function dbQuerySingleCached<T = Record<string, unknown>>(
   sql: string,
-  params: Record<string, any> = {},
+  params: Record<string, unknown> = {},
   cacheKey?: string
 ): Promise<T | null> {
   const rows = await dbQueryCached<T>(sql, params, cacheKey);
@@ -149,9 +149,9 @@ export async function dbQuerySingleCached<T = Record<string, unknown>>(
  */
 export async function dbCount(
   sql: string,
-  params: Record<string, any> = {}
+  params: Record<string, unknown> = {}
 ): Promise<number> {
-  const result = await dbQuerySingle<{ CNT: any }>(sql, params);
+  const result = await dbQuerySingle<{ CNT: string | number }>(sql, params);
   const val = result?.CNT;
   if (val === null || val === undefined) return 0;
   return typeof val === 'number' ? val : parseInt(String(val), 10) || 0;
@@ -162,7 +162,7 @@ export async function dbCount(
  */
 export async function dbCountCached(
   sql: string,
-  params: Record<string, any> = {},
+  params: Record<string, unknown> = {},
   cacheKey?: string
 ): Promise<number> {
   const key = cacheKey || `c:${sql}:${JSON.stringify(params)}`;

@@ -1,61 +1,65 @@
 import { auth } from "@/auth";
+import { dbQuery } from "@/lib/db";
 import { redirect } from "next/navigation";
-import { getExistingOperators } from "./actions";
 import { OnboardingForm } from "./onboarding-form";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
-import { ShieldCheck } from "lucide-react";
-
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import Image from "next/image";
 
 export default async function OnboardingPage() {
   const session = await auth();
 
   if (!session?.user) {
-    redirect("/api/auth/signin");
+    redirect("/login");
   }
 
-  // @ts-ignore
   if (session.user.operator_name) {
     redirect("/");
   }
 
-  const operators = await getExistingOperators();
+  // Fetch existing operators to allow claiming
+  const operatorsData = await dbQuery<{ OPERATOR_NAME: string, IS_CLAIMED: string | number }>(
+    `SELECT 
+        o.operator_name, 
+        CASE WHEN u.email IS NOT NULL THEN 1 ELSE 0 END as IS_CLAIMED
+     FROM operators o
+     LEFT JOIN users u ON o.operator_name = u.operator_name`
+  );
+
+  const operators = operatorsData.map(op => ({
+    name: op.OPERATOR_NAME,
+    isClaimed: Boolean(Number(op.IS_CLAIMED))
+  }));
 
   return (
-    <div className="flex min-h-screen w-full items-center justify-center bg-background p-4 relative overflow-hidden">
-      {/* Decorative background glow */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-primary/20 rounded-full blur-[120px] pointer-events-none" />
-      
-      <div className="w-full max-w-[450px] space-y-8 relative z-10">
+    <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
+      <div className="w-full max-w-lg space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-1000">
         <div className="flex flex-col items-center gap-4 text-center">
             <div className="relative h-20 w-20 overflow-hidden rounded-2xl border-2 border-primary/20 shadow-2xl shadow-primary/20">
                 <Image 
-                  src="/logo.png" 
-                  alt="InstaCRM Logo" 
-                  fill
-                  className="object-cover"
+                    src="/logo.png" 
+                    alt="InstaCRM Logo" 
+                    fill
+                    className="object-cover"
                 />
             </div>
-            <div>
-                <h1 className="text-3xl font-bold tracking-tight">Identity Setup</h1>
-                <p className="text-muted-foreground mt-2">Establish your operator profile to continue</p>
+            <div className="space-y-1">
+                <h1 className="text-4xl font-semibold">Establish Identity</h1>
+                <p className="text-muted-foreground font-medium">Link your Google account to an outreach persona.</p>
             </div>
         </div>
 
-        <Card className="border-primary/10 bg-card/50 backdrop-blur-xl shadow-2xl">
-          <CardHeader>
-            <CardTitle>Welcome, {session.user.name?.split(' ')[0] || 'Operator'}</CardTitle>
-            <CardDescription>
-              Select your name from the directory or create a new one if you are a new team member.
-            </CardDescription>
+        <Card className="border-primary/10 bg-card/40 backdrop-blur-xl border-2 rounded-3xl shadow-2xl shadow-primary/5">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-xl">Operator Onboarding</CardTitle>
+            <CardDescription>Select your team name or create a new one if you&apos;re new.</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="pt-6">
             <OnboardingForm initialOperators={operators} />
           </CardContent>
         </Card>
 
-        <p className="text-center text-xs text-muted-foreground">
-            Identity claims are logged and monitored for security.
+        <p className="text-center text-[10px] text-muted-foreground uppercase font-bold tracking-[0.3em] opacity-50">
+            System Identity Protocol v1.0
         </p>
       </div>
     </div>

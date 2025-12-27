@@ -1,11 +1,16 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { BarChart3, TrendingUp, Users, Target, ShieldCheck, Mail, Phone, Zap, Clock, UserCheck } from "lucide-react";
+import { BarChart3, Target, Mail, Phone, Zap, Clock, UserCheck } from "lucide-react";
 import {
     getCachedOutreachVolume,
     getCachedOperatorPerformance,
     getCachedStatusDistribution,
     getCachedEnrichmentStats,
-    getCachedActivityHeatmap
+    getCachedActivityHeatmap,
+    VolumeData,
+    OperatorPerformance,
+    EnrichmentStats,
+    HeatmapData,
+    StatusDistributionData
 } from "@/lib/data";
 import { VolumeChart } from "@/components/analytics/volume-chart";
 import { PerformanceChart } from "@/components/analytics/performance-chart";
@@ -24,18 +29,20 @@ export default async function AnalyticsPage({
   const enrichmentRange = Number(params?.enrichmentRange || "30");
 
   const [volumeData, performanceData, statusData, enrichmentData, heatmapData] = await Promise.all([
-    getCachedOutreachVolume(range),
-    getCachedOperatorPerformance(range),
-    getCachedStatusDistribution(),
-    getCachedEnrichmentStats(enrichmentRange),
-    getCachedActivityHeatmap()
+    getCachedOutreachVolume(range) as Promise<VolumeData[]>,
+    getCachedOperatorPerformance(range) as Promise<OperatorPerformance[]>,
+    getCachedStatusDistribution() as Promise<StatusDistributionData[]>,
+    getCachedEnrichmentStats(enrichmentRange) as Promise<EnrichmentStats>,
+    getCachedActivityHeatmap() as Promise<HeatmapData[]>
   ]);
 
   const enrichmentRate = Number(enrichmentData.TOTAL) > 0
     ? Math.round(((Number(enrichmentData.WITH_EMAIL) + Number(enrichmentData.WITH_PHONE)) / (Number(enrichmentData.TOTAL) * 2)) * 100)
     : 0;
 
-  const enrichmentFromDate = new Date(Date.now() - enrichmentRange * 24 * 60 * 60 * 1000).toLocaleDateString(undefined, {
+  // Use a stable date reference
+  const now = new Date();
+  const enrichmentFromDate = new Date(now.getTime() - enrichmentRange * 24 * 60 * 60 * 1000).toLocaleDateString(undefined, {
     month: 'short',
     day: 'numeric',
     year: 'numeric'
@@ -44,13 +51,13 @@ export default async function AnalyticsPage({
   return (
     <div className="space-y-8 pb-10">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div className="space-y-2">
-            <div className="flex items-center gap-2 text-primary/80 text-xs font-medium tracking-wide">
-                <BarChart3 className="h-3.5 w-3.5" />
-                <span>System Intelligence</span>
+        <div className="space-y-1">
+            <div className="flex items-center gap-2 text-primary font-bold text-xs uppercase tracking-[0.2em]">
+                <BarChart3 className="h-3 w-3" />
+                System Intelligence
             </div>
-            <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">Intelligence Hub</h1>
-            <p className="text-muted-foreground text-sm">
+            <h1 className="text-3xl font-extrabold tracking-tight">Advanced Analytics</h1>
+            <p className="text-muted-foreground text-sm max-w-2xl">
                 A comprehensive overview of your distributed outreach system performance.
             </p>
         </div>
@@ -66,16 +73,16 @@ export default async function AnalyticsPage({
                 <CardDescription>Daily message volume (Last {range} days)</CardDescription>
             </div>
             <div className="bg-primary/10 px-3 py-1 rounded-full text-primary text-[10px] font-bold shrink-0 border border-primary/20">
-                TOTAL: {volumeData.reduce((acc: number, curr: any) => acc + Number(curr.TOTAL), 0)}
+                TOTAL: {volumeData.reduce((acc: number, curr: VolumeData) => acc + Number(curr.TOTAL), 0)}
             </div>
           </CardHeader>
           <CardContent className="pt-6">
-            <VolumeChart data={volumeData as any} />
+            <VolumeChart data={volumeData.map(d => ({ LOG_DATE: d.LOG_DATE, TOTAL: Number(d.TOTAL) }))} />
           </CardContent>
         </Card>
 
         {/* Hourly Heatmap */}
-        <Card className="col-span-1 lg:col-span-4 border-primary/10 bg-card/40 backdrop-blur-sm border-2 rounded-2xl overflow-hidden">
+        <Card className="col-span-1 lg:col-span-4 border-primary/10 bg-card/40 backdrop-blur-sm border-2 rounded-2xl">
           <CardHeader className="border-b border-primary/5">
             <div className="flex items-center gap-2">
                 <Clock className="h-4 w-4 text-primary" />
@@ -86,7 +93,7 @@ export default async function AnalyticsPage({
             </div>
           </CardHeader>
           <CardContent className="pt-6 pb-2">
-            <HourlyActivityChart data={heatmapData as any} />
+            <HourlyActivityChart data={heatmapData.map(d => ({ HOUR: d.HOUR, TOTAL: Number(d.TOTAL) }))} />
             <p className="text-[9px] text-muted-foreground text-center mt-4 italic">
                 Data based on server timestamps.
             </p>
@@ -96,24 +103,24 @@ export default async function AnalyticsPage({
 
       <div className="grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-12">
         {/* Operator Leaderboard */}
-        <Card className="col-span-1 lg:col-span-6 border-primary/10 bg-card/40 backdrop-blur-sm border-2 rounded-2xl overflow-hidden">
+        <Card className="col-span-1 lg:col-span-6 border-primary/10 bg-card/40 backdrop-blur-sm border-2 rounded-2xl">
           <CardHeader className="border-b border-primary/5">
             <CardTitle className="text-lg">Team Performance</CardTitle>
             <CardDescription>Top operators (Last {range} days)</CardDescription>
           </CardHeader>
           <CardContent className="pt-6">
-            <PerformanceChart data={performanceData as any} />
+            <PerformanceChart data={performanceData.map(d => ({ NAME: d.NAME, TOTAL: Number(d.TOTAL) }))} />
           </CardContent>
         </Card>
 
         {/* Lead Status Distribution */}
-        <Card className="col-span-1 lg:col-span-6 border-primary/10 bg-card/40 backdrop-blur-sm border-2 rounded-2xl overflow-hidden">
+        <Card className="col-span-1 lg:col-span-6 border-primary/10 bg-card/40 backdrop-blur-sm border-2 rounded-2xl">
           <CardHeader className="border-b border-primary/5">
             <CardTitle className="text-lg">Conversion Pipeline</CardTitle>
             <CardDescription>Overall lead distribution</CardDescription>
           </CardHeader>
           <CardContent className="pt-2">
-            <StatusPieChart data={statusData as any} />
+            <StatusPieChart data={statusData.map(d => ({ STATUS: d.STATUS, COUNT: Number(d.COUNT) }))} />
           </CardContent>
         </Card>
       </div>
@@ -123,7 +130,7 @@ export default async function AnalyticsPage({
           <div className="absolute top-0 right-0 p-8 opacity-[0.03] group-hover:scale-110 transition-transform pointer-events-none hidden lg:block">
               <Zap className="h-40 w-40 text-primary" />
           </div>
-          <CardHeader className="border-b border-primary/5 bg-primary/5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 sm:space-y-0">
+          <CardHeader className="border-b border-primary/5 bg-primary/5 flex flex-row items-center justify-between space-y-0">
               <div>
                 <CardTitle className="text-lg">Data Enrichment Health</CardTitle>
                 <CardDescription>Prospects updated since {enrichmentFromDate}</CardDescription>
@@ -137,7 +144,7 @@ export default async function AnalyticsPage({
                       <div className="bg-primary/10 p-4 rounded-3xl mb-2">
                           <Target className="h-8 w-8 text-primary" />
                       </div>
-                      <h3 className="text-4xl font-black tracking-tighter">{enrichmentRate}%</h3>
+                      <h3 className="text-4xl font-semibold">{enrichmentRate}%</h3>
                       <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Enrichment Score</p>
                   </div>
 
@@ -146,7 +153,7 @@ export default async function AnalyticsPage({
                       <div className="bg-blue-500/10 p-4 rounded-3xl mb-2">
                           <Mail className="h-8 w-8 text-blue-500" />
                       </div>
-                      <h3 className="text-4xl font-black tracking-tighter">{enrichmentData.WITH_EMAIL}</h3>
+                      <h3 className="text-4xl font-semibold">{enrichmentData.WITH_EMAIL}</h3>
                       <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Emails Verified</p>
                   </div>
 
@@ -155,7 +162,7 @@ export default async function AnalyticsPage({
                       <div className="bg-pink-500/10 p-4 rounded-3xl mb-2">
                           <Phone className="h-8 w-8 text-pink-500" />
                       </div>
-                      <h3 className="text-4xl font-black tracking-tighter">{enrichmentData.WITH_PHONE}</h3>
+                      <h3 className="text-4xl font-semibold">{enrichmentData.WITH_PHONE}</h3>
                       <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Phones Found</p>
                   </div>
 
@@ -164,7 +171,7 @@ export default async function AnalyticsPage({
                       <div className="bg-purple-500/10 p-4 rounded-3xl mb-2">
                           <UserCheck className="h-8 w-8 text-purple-500" />
                       </div>
-                      <h3 className="text-4xl font-black tracking-tighter">{enrichmentData.TOTAL}</h3>
+                      <h3 className="text-4xl font-semibold">{enrichmentData.TOTAL}</h3>
                       <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Total Profiles</p>
                   </div>
               </div>

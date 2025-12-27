@@ -1,15 +1,19 @@
 import { auth } from "@/auth";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Instagram, Users, ShieldCheck, Zap } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Instagram, ShieldCheck, Zap } from "lucide-react";
 import { ActorCard } from "@/components/dashboard/ActorCard";
 import { ViewToggle } from "@/components/ui/view-toggle";
-import { getCachedActorsWithStats } from "@/lib/data";
+import { getCachedActorsWithStats, ActorWithStats } from "@/lib/data";
 import { dbQuery } from "@/lib/db";
+
+interface Operator {
+    OPERATOR_NAME: string;
+}
 
 async function getOperators() {
     try {
-        return await dbQuery(`SELECT operator_name FROM OPERATORS`);
-    } catch (e) {
+        return await dbQuery<Operator>(`SELECT operator_name FROM OPERATORS`);
+    } catch {
         return [];
     }
 }
@@ -21,26 +25,26 @@ export default async function ActorsPage({
 }) {
   const session = await auth();
   const params = await searchParams;
-  const view = params?.view || "my";
+  const view = params?.view || "team";
   
   const currentOperator = session?.user?.operator_name || "";
   const filterByOperator = view === "my" ? currentOperator : undefined;
 
   const [actors, operators] = await Promise.all([
-    getCachedActorsWithStats(filterByOperator),
+    getCachedActorsWithStats(filterByOperator) as Promise<ActorWithStats[]>,
     getOperators()
   ]);
 
   return (
     <div className="space-y-10 pb-10">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div className="space-y-2">
-            <div className="flex items-center gap-2 text-primary/80 text-xs font-medium tracking-wide">
-                <Instagram className="h-3.5 w-3.5" />
-                <span>Asset Management</span>
+        <div className="space-y-1">
+            <div className="flex items-center gap-2 text-primary font-bold text-xs uppercase tracking-[0.2em]">
+                <Instagram className="h-3 w-3" />
+                Asset Management
             </div>
-            <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">Actors Fleet</h1>
-            <p className="text-muted-foreground text-sm">
+            <h1 className="text-4xl font-extrabold tracking-tight">Outreach Actors</h1>
+            <p className="text-muted-foreground text-sm max-w-md">
                 Manage and monitor Instagram accounts assigned to your team.
             </p>
         </div>
@@ -50,11 +54,11 @@ export default async function ActorsPage({
       <div className="grid gap-6 grid-cols-1 lg:grid-cols-12">
         <div className="lg:col-span-8">
             <div className="grid gap-4 md:grid-cols-2">
-                {actors.map((actor: any) => (
+                {actors.map((actor) => (
                     <ActorCard 
                         key={actor.USERNAME} 
                         actor={actor} 
-                        operators={operators as any} 
+                        operators={operators} 
                     />
                 ))}
                 {actors.length === 0 && (
@@ -70,7 +74,7 @@ export default async function ActorsPage({
         </div>
 
         <div className="lg:col-span-4 space-y-6">
-            <Card className="border-primary/10 bg-card/40 backdrop-blur-sm border-2 overflow-hidden">
+            <Card className="border-primary/10 bg-card/40 backdrop-blur-sm border-2 rounded-2xl">
                 <CardHeader className="pb-3 border-b border-primary/5 bg-primary/5">
                     <div className="flex items-center gap-2">
                         <ShieldCheck className="h-4 w-4 text-primary" />
@@ -80,12 +84,12 @@ export default async function ActorsPage({
                 <CardContent className="pt-6 space-y-4">
                     <div className="p-4 rounded-xl bg-background border border-primary/10 space-y-1">
                         <p className="text-[10px] font-bold text-muted-foreground uppercase">Active Accounts</p>
-                        <p className="text-2xl font-black">{actors.filter((a: any) => a.STATUS === 'ACTIVE').length}</p>
+                        <p className="text-2xl font-semibold">{actors.filter((a) => a.STATUS === 'ACTIVE').length}</p>
                     </div>
                     <div className="p-4 rounded-xl bg-background border border-primary/10 space-y-1">
                         <p className="text-[10px] font-bold text-muted-foreground uppercase">Total Volume (Filtered)</p>
-                        <p className="text-2xl font-black text-primary">
-                            {actors.reduce((acc: number, curr: any) => acc + Number(curr.TOTAL_DMS), 0)}
+                        <p className="text-2xl font-semibold text-primary">
+                            {actors.reduce((acc: number, curr: ActorWithStats) => acc + Number(curr.TOTAL_DMS), 0)}
                         </p>
                     </div>
                     <p className="text-[10px] text-muted-foreground italic px-1">
@@ -94,7 +98,7 @@ export default async function ActorsPage({
                 </CardContent>
             </Card>
 
-            <Card className="border-primary/10 bg-card/40 backdrop-blur-sm border-2 overflow-hidden">
+            <Card className="border-primary/10 bg-card/40 backdrop-blur-sm border-2 rounded-2xl">
                 <CardHeader className="pb-3 border-b border-primary/5 bg-primary/5">
                     <div className="flex items-center gap-2">
                         <Zap className="h-4 w-4 text-primary" />

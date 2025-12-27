@@ -1,45 +1,54 @@
 declare module 'oracledb' {
-  export let outFormat: number;
-  export let fetchAsString: number[];
   export const OUT_FORMAT_OBJECT: number;
-  
-  // Data Types
   export const NUMBER: number;
   export const DATE: number;
-  export const CLOB: number;
   export const TIMESTAMP: number;
-  export const TIMESTAMP_TZ: number;
-  export const TIMESTAMP_LTZ: number;
+  export let outFormat: number;
+  export let fetchAsString: number[];
+  export let autoCommit: boolean;
 
-  export function initOracleClient(options?: any): void;
-  export function createPool(poolAttributes: any): Promise<Pool>;
-  export interface Pool {
-    getConnection(): Promise<Connection>;
+  export interface BindParameters {
+    [key: string]: string | number | boolean | null | undefined;
   }
-  export interface Connection {
-    execute<T>(sql: string, bindParams?: any, options?: any): Promise<Result<T>>;
-    close(): Promise<void>;
-    commit(): Promise<void>;
+
+  export interface ExecuteOptions {
+    outFormat?: number;
+    fetchArraySize?: number;
+    prefetchRows?: number;
+    maxRows?: number;
+    autoCommit?: boolean;
   }
+
   export interface Result<T> {
     rows?: T[];
     rowsAffected?: number;
   }
-  export type BindParameters = any[] | Record<string, any>;
-  
-  const oracledb: {
-    outFormat: number;
-    fetchAsString: number[];
-    OUT_FORMAT_OBJECT: number;
-    NUMBER: number;
-    DATE: number;
-    CLOB: number;
-    TIMESTAMP: number;
-    TIMESTAMP_TZ: number;
-    TIMESTAMP_LTZ: number;
-    initOracleClient(options?: any): void;
-    createPool(poolAttributes: any): Promise<Pool>;
-    getConnection(options: any): Promise<Connection>;
-  };
-  export default oracledb;
+
+  export interface Connection {
+    execute<T = Record<string, unknown>>(
+      sql: string,
+      params?: BindParameters,
+      options?: ExecuteOptions
+    ): Promise<Result<T>>;
+    commit(): Promise<void>;
+    close(): Promise<void>;
+  }
+
+  export interface Pool {
+    getConnection(): Promise<Connection>;
+    close(drainTime?: number): Promise<void>;
+  }
+
+  export interface PoolAttributes {
+    user?: string;
+    password?: string;
+    connectString?: string;
+    poolMin?: number;
+    poolMax?: number;
+    poolIncrement?: number;
+    poolTimeout?: number;
+  }
+
+  export function createPool(attrs: PoolAttributes): Promise<Pool>;
+  export function getConnection(attrs: PoolAttributes): Promise<Connection>;
 }

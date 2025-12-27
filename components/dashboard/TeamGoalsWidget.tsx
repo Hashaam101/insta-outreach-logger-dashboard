@@ -10,8 +10,7 @@ import {
   Loader2, 
   AlertCircle 
 } from "lucide-react"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -26,19 +25,11 @@ import {
 import { 
   getGoalsDashboardData, 
   suggestTeamGoal, 
-  setPersonalGoal 
+  setPersonalGoal,
+  Goal
 } from "@/app/actions/governance"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
-
-interface Goal {
-  key: string
-  description: string
-  teamValue: number
-  suggestedBy: string
-  updatedAt: string
-  personalValue: number | null
-}
 
 export function TeamGoalsWidget() {
   const [goals, setGoals] = React.useState<Goal[]>([])
@@ -52,7 +43,7 @@ export function TeamGoalsWidget() {
   const loadData = React.useCallback(async () => {
     setIsLoading(true)
     const data = await getGoalsDashboardData()
-    if (data) setGoals(data as any)
+    if (data) setGoals(data)
     setIsLoading(false)
   }, [])
 
@@ -108,7 +99,7 @@ export function TeamGoalsWidget() {
                 <Target className="h-4 w-4 text-primary" />
                 <CardTitle className="text-sm">Operation Limits</CardTitle>
             </div>
-            <Badge variant="outline" className="text-[9px] uppercase font-bold tracking-tighter bg-background/50 border-primary/20">
+            <Badge variant="outline" className="text-[9px] uppercase font-bold bg-background/50 border-primary/20">
                 Democratic Governance
             </Badge>
         </div>
@@ -175,7 +166,7 @@ export function TeamGoalsWidget() {
                         <span className="text-[10px] font-bold uppercase tracking-widest">Team</span>
                     </div>
                     <div className="flex items-baseline gap-1">
-                        <span className="text-xl font-black tracking-tighter">{goal.teamValue}</span>
+                        <span className="text-xl font-semibold">{goal.teamValue}</span>
                         <span className="text-[10px] text-muted-foreground font-medium">by {goal.suggestedBy}</span>
                     </div>
                 </div>
@@ -189,7 +180,7 @@ export function TeamGoalsWidget() {
                         <Input 
                             type="number" 
                             defaultValue={goal.personalValue ?? goal.teamValue}
-                            className="h-8 py-0 px-2 text-base font-black tracking-tighter bg-transparent border-none focus-visible:ring-1 focus-visible:ring-primary/30 w-full"
+                            className="h-8 py-0 px-2 text-base font-semibold bg-transparent border-none focus-visible:ring-1 focus-visible:ring-primary/30 w-full"
                             onBlur={(e) => handlePersonalUpdate(goal.key, e.target.value)}
                             onKeyDown={(e) => e.key === 'Enter' && handlePersonalUpdate(goal.key, e.currentTarget.value)}
                         />
@@ -214,4 +205,16 @@ export function TeamGoalsWidget() {
       </CardContent>
     </Card>
   )
+}
+
+function Badge({ children, variant, className }: { children: React.ReactNode; variant?: "outline" | "default"; className?: string }) {
+    return (
+        <span className={cn(
+            "inline-flex items-center rounded-full border px-2.5 py-0.5 text-[10px] font-bold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
+            variant === "outline" ? "text-foreground" : "border-transparent bg-primary text-primary-foreground hover:bg-primary/80",
+            className
+        )}>
+            {children}
+        </span>
+    )
 }

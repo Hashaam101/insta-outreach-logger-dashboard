@@ -1,6 +1,6 @@
 "use client"
 
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { User, Users, TrendingUp, Zap } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -34,7 +34,7 @@ export function OperatorStats({ data }: OperatorStatsProps) {
                         <Zap className="h-4 w-4 text-primary" />
                         <CardTitle className="text-sm">24h Performance Hub</CardTitle>
                     </div>
-                    <Badge variant="outline" className="text-[9px] uppercase font-bold tracking-tighter bg-background/50 border-primary/20">
+                    <Badge variant="outline" className="text-[9px] uppercase font-bold bg-background/50 border-primary/20">
                         Live Benchmarks
                     </Badge>
                 </div>
@@ -46,7 +46,7 @@ export function OperatorStats({ data }: OperatorStatsProps) {
                         <span className="text-[10px] font-bold uppercase tracking-widest">My Outreach</span>
                     </div>
                     <div className="flex items-baseline gap-2">
-                        <span className="text-3xl font-black tracking-tighter">{myLogs}</span>
+                        <span className="text-3xl font-semibold">{myLogs}</span>
                         <span className="text-xs text-muted-foreground font-medium">DMs</span>
                     </div>
                     <div className={cn(
@@ -64,7 +64,7 @@ export function OperatorStats({ data }: OperatorStatsProps) {
                         <span className="text-[10px] font-bold uppercase tracking-widest">Team Average</span>
                     </div>
                     <div className="flex items-baseline gap-2">
-                        <span className="text-3xl font-black tracking-tighter text-foreground/60">{teamAverage}</span>
+                        <span className="text-3xl font-semibold text-foreground/60">{teamAverage}</span>
                         <span className="text-xs text-muted-foreground font-medium">DMs</span>
                     </div>
                     <div className="text-[10px] text-muted-foreground font-medium italic">

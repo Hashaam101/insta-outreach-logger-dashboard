@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/sheet"
 import { Textarea } from "@/components/ui/textarea"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { NotebookPen, Send, Loader2 } from "lucide-react"
+import { Send, Loader2 } from "lucide-react"
 import { addLeadNote, getLeadNotes } from "@/app/(dashboard)/leads/actions"
 
 interface Note {
@@ -36,12 +36,21 @@ export function NotesSheet({ username, open, onOpenChange }: NotesSheetProps) {
 
   // Fetch notes when sheet opens
   useEffect(() => {
+      let isMounted = true;
       if (open) {
-          setIsLoading(true);
-          getLeadNotes(username)
-              .then(data => setNotes(data as any))
-              .finally(() => setIsLoading(false));
+          // Use a slight delay or requestAnimationFrame to move it out of the synchronous render path
+          const fetchNotes = async () => {
+              setIsLoading(true);
+              try {
+                  const data = await getLeadNotes(username);
+                  if (isMounted) setNotes(data as Note[]);
+              } finally {
+                  if (isMounted) setIsLoading(false);
+              }
+          };
+          fetchNotes();
       }
+      return () => { isMounted = false; };
   }, [open, username]);
 
   const handleAddNote = async () => {
@@ -105,7 +114,7 @@ export function NotesSheet({ username, open, onOpenChange }: NotesSheetProps) {
             </ScrollArea>
         </div>
 
-        <SheetFooter className="mt-auto flex-col sm:flex-col gap-2">
+        <SheetFooter className="mt-auto flex flex-col sm:flex-col gap-2">
             <Textarea 
                 placeholder="Type your note here..." 
                 value={newNote}
