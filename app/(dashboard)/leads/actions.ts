@@ -1,20 +1,28 @@
 'use server';
 
 import { auth } from "@/auth";
-import { dbQuery } from "@/lib/db";
-import { revalidatePath } from "next/cache";
+import { dbQuery, clearCache } from "@/lib/db";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { rateLimit } from "@/lib/ratelimit";
 import { z } from "zod";
 
 // --- VALIDATION SCHEMAS ---
 const StatusSchema = z.object({
     username: z.string().min(1).max(255),
-    status: z.enum(["Not Contacted", "Contacted", "Reply Received", "Booked"])
+    status: z.enum([
+        "Cold No Reply", 
+        "Replied", 
+        "Warm", 
+        "Booked", 
+        "Paid", 
+        "Tableturnerr Client", 
+        "Excluded"
+    ])
 });
 
 const NoteSchema = z.object({
     username: z.string().min(1).max(255),
-    text: z.string().min(1).max(2000)
+    text: z.string().max(4000) // Oracle VARCHAR/TEXT limit safety
 });
 
 // --- ACTIONS ---
@@ -28,8 +36,22 @@ export async function refreshData() {
     if (!success) throw new Error("Rate limit exceeded. Please wait a minute.");
 
     try {
-        // Purge the entire dashboard cache
+        // Clear in-memory LRU cache
+        clearCache();
+
+        // Invalidate all Next.js cache tags
+        revalidateTag("stats");
+        revalidateTag("global");
+        revalidateTag("logs");
+        revalidateTag("prospects");
+        revalidateTag("metrics");
+        revalidateTag("actors");
+        revalidateTag("recent");
+        revalidateTag("analytics");
+
+        // Also revalidate all paths
         revalidatePath("/", "layout");
+
         return { success: true, timestamp: new Date().toISOString() };
     } catch {
         return { success: false };
@@ -44,17 +66,19 @@ export async function updateLeadStatus(username: string, newStatus: string) {
   const { success: limitOk } = rateLimit(`update_${session.user.email}`, 20);
   if (!limitOk) throw new Error("Too many updates. Slow down.");
 
-  // Validate Input (Prevents SQL Injection via malformed strings)
+  // Validate Input
   const validated = StatusSchema.parse({ username, status: newStatus });
 
   try {
-    // SECURITY: Always use bind variables (:status, :username) - NEVER use string interpolation
     await dbQuery(
-      `UPDATE prospects SET status = :status, last_updated = SYSTIMESTAMP WHERE target_username = :username`,
+      `UPDATE TARGETS SET TAR_STATUS = :status, LAST_UPDATED = SYSTIMESTAMP WHERE TAR_USERNAME = :username`,
       { status: validated.status, username: validated.username }
     );
     
+    // Also log this change in EVENT_LOGS? Ideally yes, but sticking to basic update for now to avoid complexity unless requested.
+    
     revalidatePath('/leads');
+    revalidateTag('prospects');
     return { success: true };
   } catch (error) {
     console.error("Failed to update status:", error);
@@ -62,7 +86,10 @@ export async function updateLeadStatus(username: string, newStatus: string) {
   }
 }
 
-export async function addLeadNote(username: string, noteText: string) {
+/**
+ * Updates the single NOTES field for a Target
+ */
+export async function updateLeadNote(username: string, noteText: string) {
   const session = await auth();
   if (!session?.user?.email) throw new Error("Unauthorized");
 
@@ -70,53 +97,52 @@ export async function addLeadNote(username: string, noteText: string) {
   if (!limitOk) throw new Error("Too many notes. Slow down.");
 
   const validated = NoteSchema.parse({ username, text: noteText });
-  const operatorName = session.user.operator_name || 'Unknown';
 
   try {
     await dbQuery(
-      `INSERT INTO notes (username, note_text, operator_name, created_at) VALUES (:username, :note_text, :operator, SYSTIMESTAMP)`,
+      `UPDATE TARGETS SET NOTES = :note_text, LAST_UPDATED = SYSTIMESTAMP WHERE TAR_USERNAME = :username`,
       { 
         username: validated.username, 
-        note_text: validated.text,
-        operator: operatorName
+        note_text: validated.text
       }
     );
 
     revalidatePath('/leads');
+    revalidateTag('prospects');
     return { success: true };
   } catch (error) {
-    console.error("Failed to add note:", error);
+    console.error("Failed to update note:", error);
     return { success: false, error: "Database error" };
   }
 }
 
-export async function getLeadNotes(username: string) {
+/**
+ * Get the current note for a target
+ */
+export async function getLeadNote(username: string) {
     // Validation
     const safeUsername = z.string().min(1).parse(username);
 
     try {
-        const notes = await dbQuery<{ ID: number, NOTE_TEXT: string, OPERATOR_NAME: string, CREATED_AT: string }>(
-            `SELECT id, note_text, operator_name, created_at FROM notes WHERE username = :username ORDER BY created_at DESC`,
+        const result = await dbQuery<{ NOTES: string }>(
+            `SELECT NOTES FROM TARGETS WHERE TAR_USERNAME = :username`,
             { username: safeUsername }
         );
-        return notes.map(n => ({
-            id: n.ID,
-            text: n.NOTE_TEXT,
-            operator: n.OPERATOR_NAME,
-            created_at: n.CREATED_AT
-        }));
+        return result[0]?.NOTES || "";
     } catch (error) {
-        console.error("Failed to fetch notes:", error);
-        return [];
+        console.error("Failed to fetch note:", error);
+        return "";
     }
 }
 
 /**
- * Fetch all actors for transfer dropdown
+ * Fetch all active actors for transfer dropdown
  */
 export async function getActors() {
     try {
-        return await dbQuery<{ USERNAME: string }>(`SELECT username FROM actors WHERE status = 'ACTIVE' ORDER BY username ASC`);
+        return await dbQuery<{ USERNAME: string }>(
+            `SELECT ACT_USERNAME as USERNAME FROM ACTORS WHERE ACT_STATUS = 'Active' ORDER BY ACT_USERNAME ASC`
+        );
     } catch {
         return [];
     }

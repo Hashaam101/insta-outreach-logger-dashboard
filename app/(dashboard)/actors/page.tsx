@@ -3,20 +3,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Instagram, ShieldCheck, Zap } from "lucide-react";
 import { ActorCard } from "@/components/dashboard/ActorCard";
 import { ViewToggle } from "@/components/ui/view-toggle";
-import { getCachedActorsWithStats, ActorWithStats } from "@/lib/data";
-import { dbQuery } from "@/lib/db";
-
-interface Operator {
-    OPERATOR_NAME: string;
-}
-
-async function getOperators() {
-    try {
-        return await dbQuery<Operator>(`SELECT operator_name FROM OPERATORS`);
-    } catch {
-        return [];
-    }
-}
+import { getCachedActorsWithStats, getCachedOperators, ActorWithStats, OperatorBasic } from "@/lib/data";
+import { cookies } from "next/headers";
 
 export default async function ActorsPage({
     searchParams,
@@ -25,15 +13,17 @@ export default async function ActorsPage({
 }) {
   const session = await auth();
   const params = await searchParams;
-  const view = params?.view || "team";
-  
+  const cookieStore = await cookies();
+
+  // Priority: URL Param -> Cookie -> Default 'my'
+  const view = params?.view || cookieStore.get("dashboard_view")?.value || "my";
+
   const currentOperator = session?.user?.operator_name || "";
   const filterByOperator = view === "my" ? currentOperator : undefined;
 
-  const [actors, operators] = await Promise.all([
-    getCachedActorsWithStats(filterByOperator) as Promise<ActorWithStats[]>,
-    getOperators()
-  ]);
+  // Sequential queries to avoid connection pool contention
+  const actors = await getCachedActorsWithStats(filterByOperator) as ActorWithStats[];
+  const operators = await getCachedOperators() as OperatorBasic[];
 
   return (
     <div className="space-y-10 pb-10">
@@ -56,7 +46,7 @@ export default async function ActorsPage({
             <div className="grid gap-4 md:grid-cols-2">
                 {actors.map((actor) => (
                     <ActorCard 
-                        key={actor.USERNAME} 
+                        key={actor.ACT_ID} 
                         actor={actor} 
                         operators={operators} 
                     />
@@ -74,7 +64,7 @@ export default async function ActorsPage({
         </div>
 
         <div className="lg:col-span-4 space-y-6">
-            <Card className="border-primary/10 bg-card/40 backdrop-blur-sm border-2 rounded-2xl">
+            <Card className="border-primary/10 bg-card/40 backdrop-blur-sm border-2 rounded-2xl overflow-hidden">
                 <CardHeader className="pb-3 border-b border-primary/5 bg-primary/5">
                     <div className="flex items-center gap-2">
                         <ShieldCheck className="h-4 w-4 text-primary" />
@@ -84,7 +74,7 @@ export default async function ActorsPage({
                 <CardContent className="pt-6 space-y-4">
                     <div className="p-4 rounded-xl bg-background border border-primary/10 space-y-1">
                         <p className="text-[10px] font-bold text-muted-foreground uppercase">Active Accounts</p>
-                        <p className="text-2xl font-semibold">{actors.filter((a) => a.STATUS === 'ACTIVE').length}</p>
+                        <p className="text-2xl font-semibold">{actors.filter((a) => a.ACT_STATUS === 'Active').length}</p>
                     </div>
                     <div className="p-4 rounded-xl bg-background border border-primary/10 space-y-1">
                         <p className="text-[10px] font-bold text-muted-foreground uppercase">Total Volume (Filtered)</p>
@@ -98,7 +88,7 @@ export default async function ActorsPage({
                 </CardContent>
             </Card>
 
-            <Card className="border-primary/10 bg-card/40 backdrop-blur-sm border-2 rounded-2xl">
+            <Card className="border-primary/10 bg-card/40 backdrop-blur-sm border-2 rounded-2xl overflow-hidden">
                 <CardHeader className="pb-3 border-b border-primary/5 bg-primary/5">
                     <div className="flex items-center gap-2">
                         <Zap className="h-4 w-4 text-primary" />

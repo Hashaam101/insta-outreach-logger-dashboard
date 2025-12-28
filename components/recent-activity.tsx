@@ -3,7 +3,7 @@
 import * as React from "react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { MessageSquare, Calendar, User, Instagram } from "lucide-react";
-import { getCachedRecentLogs, OutreachLog } from "@/lib/data";
+import { getCachedRecentLogs, OutreachLogView } from "@/lib/data";
 
 function formatTimeAgo(date: Date | string) {
     const now = new Date();
@@ -21,12 +21,12 @@ function formatTimeAgo(date: Date | string) {
 }
 
 export function RecentActivity({ operatorName }: { operatorName?: string }) {
-    const [logs, setLogs] = React.useState<OutreachLog[]>([]);
+    const [logs, setLogs] = React.useState<OutreachLogView[]>([]);
     const [isLoading, setIsLoading] = React.useState(true);
 
     React.useEffect(() => {
         getCachedRecentLogs(operatorName).then(data => {
-            setLogs(data as OutreachLog[]);
+            setLogs(data as OutreachLogView[]);
             setIsLoading(false);
         });
     }, [operatorName]);
@@ -41,18 +41,18 @@ export function RecentActivity({ operatorName }: { operatorName?: string }) {
                 <div key={idx} className="flex items-start gap-4 p-4 hover:bg-primary/5 transition-colors group">
                     <Avatar className="h-10 w-10 border border-primary/10 rounded-xl">
                         <AvatarFallback className="bg-primary/10 text-primary text-xs font-bold uppercase">
-                            {log.TARGET_USERNAME[0]}
+                            {log.TAR_USERNAME[0]}
                         </AvatarFallback>
                     </Avatar>
                     
                     <div className="flex-1 min-w-0 space-y-1">
                         <div className="flex items-center justify-between gap-2">
                             <p className="text-sm font-bold truncate">
-                                @{log.TARGET_USERNAME}
+                                {log.TAR_USERNAME}
                             </p>
                             <span className="text-[10px] text-muted-foreground font-medium shrink-0 flex items-center gap-1">
                                 <Calendar className="h-3 w-3" />
-                                {formatTimeAgo(log.CREATED_AT)}
+                                {formatTimeAgo(log.SENT_AT)}
                             </span>
                         </div>
                         
@@ -63,11 +63,11 @@ export function RecentActivity({ operatorName }: { operatorName?: string }) {
                         <div className="flex items-center gap-3 pt-1">
                             <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-primary/5 border border-primary/10">
                                 <User className="h-2.5 w-2.5 text-primary" />
-                                <span className="text-[9px] font-bold text-primary/80 uppercase tracking-tight">{log.OWNER_OPERATOR}</span>
+                                <span className="text-[9px] font-bold text-primary/80 uppercase tracking-tight">{log.OPR_NAME}</span>
                             </div>
                             <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-blue-500/5 border border-blue-500/10">
                                 <Instagram className="h-2.5 w-2.5 text-blue-500" />
-                                <span className="text-[9px] font-bold text-blue-500/80 lowercase tracking-tight">@{log.ACTOR_USERNAME}</span>
+                                <span className="text-[9px] font-bold text-blue-500/80 lowercase tracking-tight">{log.ACT_USERNAME}</span>
                             </div>
                         </div>
                     </div>

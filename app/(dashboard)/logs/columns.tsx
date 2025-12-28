@@ -4,7 +4,6 @@ import { ColumnDef } from "@tanstack/react-table"
 import { Calendar, Instagram, User, MessageSquare } from "lucide-react"
 
 export type OutreachLog = {
-  log_id: number
   target_username: string
   actor_username: string
   message_text: string
@@ -42,7 +41,7 @@ export const columns: ColumnDef<OutreachLog>[] = [
     cell: ({ row }) => (
         <div className="flex items-center gap-1 text-xs font-medium text-primary/80">
             <Instagram className="h-3 w-3" />
-            @{row.getValue("actor_username")}
+            {row.getValue("actor_username")}
         </div>
     )
   },
@@ -51,7 +50,7 @@ export const columns: ColumnDef<OutreachLog>[] = [
     header: () => <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Target</div>,
     cell: ({ row }) => (
         <div className="font-bold text-sm">
-            @{row.getValue("target_username")}
+            {row.getValue("target_username")}
         </div>
     )
   },

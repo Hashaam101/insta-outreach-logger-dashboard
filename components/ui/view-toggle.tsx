@@ -4,6 +4,7 @@ import * as React from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { User, Users, Loader2 } from "lucide-react"
+import { setViewCookie } from "@/app/actions/ui"
 
 export function ViewToggle() {
   const router = useRouter()
@@ -16,6 +17,8 @@ export function ViewToggle() {
     params.set("view", value)
     
     startTransition(() => {
+        // Persist preference
+        setViewCookie(value);
         router.push(`?${params.toString()}`)
     })
   }
@@ -23,7 +26,7 @@ export function ViewToggle() {
   return (
     <div className="flex items-center gap-4 bg-card/40 p-1 rounded-2xl border border-primary/10 backdrop-blur-sm relative">
       <Tabs value={currentView} onValueChange={setView} className="w-auto">
-        <TabsList className="bg-transparent h-9 gap-1">
+        <TabsList className={`bg-transparent h-9 gap-1 ${isPending ? 'animate-pulse opacity-70' : ''}`}>
           <TabsTrigger 
             value="my" 
             disabled={isPending}
@@ -42,12 +45,6 @@ export function ViewToggle() {
           </TabsTrigger>
         </TabsList>
       </Tabs>
-      
-      {isPending && (
-        <div className="absolute -right-8 top-1/2 -translate-y-1/2">
-            <Loader2 className="h-4 w-4 animate-spin text-primary opacity-70" />
-        </div>
-      )}
     </div>
   )
 }

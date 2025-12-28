@@ -1,47 +1,72 @@
 import { auth } from "@/auth";
-import { dbQuery } from "@/lib/db";
+import { getPagedLeads, getCachedOperators, getCachedActors } from "@/lib/data";
 import { DataTable } from "@/components/ui/data-table";
-import { columns, Lead } from "./columns";
-import { LeadsFilter } from "@/components/leads/leads-filter";
+import { columns } from "./columns";
+import { LeadsToolbar } from "@/components/leads/leads-toolbar";
 import { 
   Users, 
-  Search, 
   Download, 
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { LeadsStatusFilter } from "@/components/leads/leads-status-filter";
 
 interface PageProps {
-  searchParams: Promise<{ q?: string; status?: string }>;
+  searchParams: Promise<{ 
+    q?: string; 
+    statuses?: string;
+    operators?: string;
+    actors?: string;
+    page?: string 
+  }>;
 }
 
 export default async function LeadsPage({ searchParams }: PageProps) {
   const session = await auth();
   const params_data = await searchParams;
+  
   const query = params_data.q || "";
-  const statusFilter = params_data.status || "All";
+  const page = Number(params_data.page) || 1;
+  const pageSize = 15;
 
-  // Build dynamic query
-  const whereConditions = ["1=1"];
-  const queryParams: Record<string, string> = {};
+  const statuses = params_data.statuses?.split(",").filter(Boolean);
+  const operators = params_data.operators?.split(",").filter(Boolean);
+  const actors = params_data.actors?.split(",").filter(Boolean);
 
-  if (query) {
-    whereConditions.push("(LOWER(target_username) LIKE :q)");
-    queryParams.q = `%${query.toLowerCase()}%`;
-  }
+  // Default to session operator only if NO filters are applied?
+  // User requested "choose which...". 
+  // If I default to "me", the user sees only their leads initially.
+  // If they use the filter, they can expand scope.
+  // BUT: "operators" filter overrides default "my leads" view.
+  // If no operator filter is set, should we show ALL or just MINE?
+  // Current behavior was "MINE".
+  // New behavior: "Command Center" implies broader view, but usually defaults to "My View".
+  // However, the filter component allows selecting operators.
+  // Strategy: 
+  // 1. If 'operators' filter is present, use it.
+  // 2. If 'actors' filter is present, use it.
+  // 3. If NEITHER, default to session.user.operator_name to keep "My View" as landing state.
+  // UNLESS the user explicitly clears filters (Reset). But Reset clears URL params.
+  // Let's stick to: If NO filters, show MY leads.
+  
+  const effectiveOperators = (operators && operators.length > 0) 
+    ? operators 
+    : (actors && actors.length > 0) ? undefined : [session?.user?.operator_name || ""];
 
-  if (statusFilter !== "All") {
-    whereConditions.push("status = :status");
-    queryParams.status = statusFilter;
-  }
+  // Fetch data for filters
+  const [opsList, actsList] = await Promise.all([
+    getCachedOperators(),
+    getCachedActors()
+  ]);
 
-  const leads = await dbQuery<Lead>(
-    `SELECT target_username, status, TO_CHAR(last_updated, 'YYYY-MM-DD HH24:MI:SS') as last_updated, email, phone_number, source_summary 
-     FROM prospects 
-     WHERE ${whereConditions.join(" AND ")}
-     ORDER BY last_updated DESC`,
-    queryParams
+  const { data: leads, metadata } = await getPagedLeads(
+    page, 
+    pageSize, 
+    {
+        query,
+        statuses: statuses,
+        operators: effectiveOperators,
+        actors: actors
+    }
   );
 
   return (
@@ -65,40 +90,33 @@ export default async function LeadsPage({ searchParams }: PageProps) {
         </div>
       </div>
 
-      <div className="grid gap-6 grid-cols-1 lg:grid-cols-12">
-        {/* Filters */}
-        <div className="lg:col-span-12 flex flex-col md:flex-row gap-4">
-            <div className="flex-1">
-                <LeadsFilter />
-            </div>
-            <div className="w-full md:w-64">
-                <LeadsStatusFilter />
-            </div>
-        </div>
+      <div className="grid gap-6 grid-cols-1">
+        {/* Toolbar */}
+        <LeadsToolbar 
+            operators={opsList.map(o => ({ label: o.OPR_NAME, value: o.OPR_NAME }))}
+            actors={actsList.map(a => ({ label: a.ACT_USERNAME, value: a.ACT_USERNAME }))}
+        />
 
         {/* Main Table */}
-        <Card className="lg:col-span-12 border-primary/10 bg-card/40 backdrop-blur-sm border-2 rounded-2xl overflow-hidden">
-          <CardHeader className="border-b border-primary/5 bg-primary/5 flex flex-row items-center justify-between">
-            <div className="flex items-center gap-2">
-                <Search className="h-4 w-4 text-primary" />
-                <div>
+        <Card className="border-primary/10 bg-card/40 backdrop-blur-sm border-2 rounded-2xl overflow-hidden">
+          <CardHeader className="border-b border-primary/5 bg-primary/5 flex flex-row items-center justify-between py-4">
+            <div className="flex items-center gap-4">
+                <div className="flex flex-col">
                     <CardTitle className="text-base">Target Database</CardTitle>
                     <CardDescription className="text-[10px]">
-                        {leads.length} prospects matching your current filters
+                        Page {metadata.page} of {metadata.pageCount} • {metadata.total} prospects found
                     </CardDescription>
                 </div>
             </div>
-            {session?.user?.operator_name && (
-                <div className="bg-primary/10 px-3 py-1 rounded-full text-primary text-[10px] font-bold border border-primary/20">
-                    OPERATOR: {session.user.operator_name}
-                </div>
-            )}
           </CardHeader>
           <CardContent className="p-0">
             <DataTable 
                 columns={columns} 
                 data={leads} 
-                pageSize={15}
+                pageSize={pageSize}
+                enableServerPagination={true}
+                pageCount={metadata.pageCount}
+                currentPage={metadata.page}
             />
           </CardContent>
         </Card>

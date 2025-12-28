@@ -14,7 +14,7 @@ export async function TopActors() {
                             <Instagram className="h-4 w-4 text-primary" />
                         </div>
                         <div className="flex flex-col">
-                            <span className="text-sm font-bold">@{actor.ACTOR_USERNAME}</span>
+                            <span className="text-sm font-bold">{actor.ACTOR_USERNAME}</span>
                             <span className="text-[10px] text-muted-foreground uppercase font-bold">Ranking #{idx + 1}</span>
                         </div>
                     </div>

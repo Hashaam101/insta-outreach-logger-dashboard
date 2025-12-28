@@ -1,9 +1,11 @@
+import { Suspense } from "react";
 import { auth } from "@/auth";
 import { StatsGrid } from "@/components/stats-grid";
 import { StatusDistribution } from "@/components/status-distribution";
 import { TopActors } from "@/components/top-actors";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { 
   Sparkles, 
   ArrowRight, 
@@ -16,6 +18,27 @@ import { TeamGoalsWidget } from "@/components/dashboard/TeamGoalsWidget";
 import { OperatorStats } from "@/components/dashboard/OperatorStats";
 import { ViewToggle } from "@/components/ui/view-toggle";
 import { getCachedOperatorStats, OperatorStatsData } from "@/lib/data";
+import { cookies } from "next/headers";
+
+function StatsGridSkeleton() {
+  return (
+    <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
+      {Array.from({ length: 4 }).map((_, i) => (
+        <Skeleton key={i} className="h-32 rounded-xl bg-primary/5" />
+      ))}
+    </div>
+  );
+}
+
+function ChartSkeleton() {
+  return (
+    <div className="space-y-4 pt-4">
+      <Skeleton className="h-8 w-full bg-primary/5" />
+      <Skeleton className="h-8 w-[90%] bg-primary/5" />
+      <Skeleton className="h-8 w-[80%] bg-primary/5" />
+    </div>
+  );
+}
 
 export default async function DashboardPage({
     searchParams,
@@ -24,7 +47,10 @@ export default async function DashboardPage({
 }) {
   const session = await auth();
   const params = await searchParams;
-  const view = params?.view || "team";
+  const cookieStore = await cookies();
+  
+  // Priority: URL Param -> Cookie -> Default 'my'
+  const view = params?.view || cookieStore.get("dashboard_view")?.value || "my";
   
   const currentOperator = session?.user?.operator_name || "";
   const filterByOperator = view === "my" ? currentOperator : undefined;
@@ -69,19 +95,23 @@ export default async function DashboardPage({
       </div>
       
       {/* Stats Section */}
-      <StatsGrid operatorName={filterByOperator} />
+      <Suspense fallback={<StatsGridSkeleton />}>
+        <StatsGrid operatorName={filterByOperator} />
+      </Suspense>
 
       <div className="grid gap-6 grid-cols-1 lg:grid-cols-12">
         {/* Left Column: Governance & My Stats */}
         <div className="order-2 lg:order-1 lg:col-span-7 space-y-6">
             <OperatorStats data={operatorStats} />
-            <TeamGoalsWidget />
+            <Suspense fallback={<Skeleton className="h-[300px] rounded-2xl bg-primary/5" />}>
+              <TeamGoalsWidget />
+            </Suspense>
         </div>
 
         {/* Right Column: Distribution & Rankings */}
         <div className="order-1 lg:order-2 lg:col-span-5 space-y-6">
             {/* Status Distribution */}
-            <Card className="border-primary/10 bg-card/40 backdrop-blur-sm border-2 rounded-2xl">
+            <Card className="border-primary/10 bg-card/40 backdrop-blur-sm border-2 rounded-2xl overflow-hidden">
                 <CardHeader className="pb-3 border-b border-primary/5 bg-primary/5">
                     <div className="flex items-center gap-2">
                         <PieChart className="h-4 w-4 text-primary" />
@@ -94,12 +124,14 @@ export default async function DashboardPage({
                     </div>
                 </CardHeader>
                 <CardContent className="pt-6">
-                    <StatusDistribution operatorName={filterByOperator} />
+                    <Suspense fallback={<ChartSkeleton />}>
+                      <StatusDistribution operatorName={filterByOperator} />
+                    </Suspense>
                 </CardContent>
             </Card>
 
             {/* Top Actors */}
-            <Card className="border-primary/10 bg-card/40 backdrop-blur-sm border-2 rounded-2xl">
+            <Card className="border-primary/10 bg-card/40 backdrop-blur-sm border-2 rounded-2xl overflow-hidden">
                 <CardHeader className="pb-3 border-b border-primary/5 bg-primary/5">
                     <div className="flex items-center gap-2">
                         <Target className="h-4 w-4 text-primary" />
@@ -110,7 +142,9 @@ export default async function DashboardPage({
                     </div>
                 </CardHeader>
                 <CardContent className="pt-6">
-                    <TopActors />
+                    <Suspense fallback={<ChartSkeleton />}>
+                      <TopActors />
+                    </Suspense>
                 </CardContent>
             </Card>
         </div>

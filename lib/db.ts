@@ -1,97 +1,120 @@
 import oracledb from 'oracledb';
 import { env } from './env';
-import { LRUCache } from 'lru-cache';
-
-// oracledb 6.x uses Thin mode by default (pure JS, no Oracle Client needed)
-// Configure for stability
-oracledb.outFormat = oracledb.OUT_FORMAT_OBJECT;
-oracledb.autoCommit = true;
-
-// CRITICAL: Fetch numbers as strings to avoid Thin mode buffer alignment issues.
-oracledb.fetchAsString = [oracledb.NUMBER];
-
-// In-memory cache (5 min TTL)
-const queryCache = new LRUCache<string, unknown>({
-  max: 200,
-  ttl: 1000 * 60 * 5,
-});
-
-let pool: oracledb.Pool | null = null;
-let poolCreating: Promise<oracledb.Pool> | null = null;
-
-async function getPool(): Promise<oracledb.Pool> {
-  if (pool) return pool;
-
-  // Prevent multiple simultaneous pool creations
-  if (poolCreating) return poolCreating;
-
-  poolCreating = (async () => {
-    // Clean up connection string (remove newlines/extra spaces)
-    const connStr = (env.ORACLE_CONN_STRING || '').replace(/\s+/g, '');
-
-    console.log('🔌 Connecting to Oracle...');
-    
-    pool = await oracledb.createPool({
-      user: env.ORACLE_USER,
-      password: env.ORACLE_PASSWORD,
-      connectString: connStr,
-      poolMin: 1,
-      poolMax: 4,
-      poolIncrement: 1,
-      poolTimeout: 60,
-    });
-    console.log('✅ Oracle Pool Created');
-    return pool;
-  })();
-
-  return poolCreating;
-}
 
 /**
- * Execute SQL query with automatic retry on buffer errors
+ * ORACLE DATABASE LAYER - Optimized for Stability & Session Management
+ *
+ * Key changes:
+ * - Global Singleton Pattern (prevents multiple pools during hot-reloads)
+ * - Conservative Pooling (reduced max sessions)
+ * - Strict Connection Lifecycle
+ */
+
+// Configure oracledb for Thin mode stability
+oracledb.outFormat = oracledb.OUT_FORMAT_OBJECT;
+oracledb.autoCommit = true;
+oracledb.fetchAsString = [oracledb.NUMBER, oracledb.DATE, oracledb.CLOB];
+oracledb.stmtCacheSize = 0;
+
+// Singleton pattern for Next.js dev mode
+const globalForDb = global as unknown as { pool: oracledb.Pool | undefined };
+
+async function getPool(): Promise<oracledb.Pool> {
+  if (globalForDb.pool) return globalForDb.pool;
+
+  try {
+    const newPool = await oracledb.createPool({
+      user: env.ORACLE_USER,
+      password: env.ORACLE_PASSWORD,
+      connectString: (env.ORACLE_CONN_STRING || '').replace(/\s+/g, ''),
+      poolMin: 1,
+      poolMax: 4,      // Significantly reduced to prevent ORA-00018
+      poolIncrement: 1,
+      poolTimeout: 30, // Close idle connections faster (30s)
+      queueMax: 50,    // Allow more queries to wait rather than opening new sessions
+    });
+    
+    console.log('✅ Oracle DB Pool Initialized (Global Singleton)');
+    globalForDb.pool = newPool;
+    return newPool;
+  } catch (err) {
+    console.error('❌ Failed to create DB pool:', err);
+    throw err;
+  }
+}
+
+// Simple in-memory cache for query results
+const queryCache = new Map<string, { data: unknown; expires: number }>();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+/**
+ * Execute a query using the connection pool
  */
 export async function dbQuery<T = Record<string, unknown>>(
   sql: string,
   params: Record<string, unknown> = {},
-  retries = 2
+  options: { maxRetries?: number; useCache?: boolean; cacheKey?: string } = {}
 ): Promise<T[]> {
+  const { maxRetries = 3, useCache = false, cacheKey } = options;
+
+  // Check cache first
+  if (useCache && cacheKey) {
+    const cached = queryCache.get(cacheKey);
+    if (cached && cached.expires > Date.now()) {
+      return cached.data as T[];
+    }
+  }
+
   let lastError: Error | null = null;
 
-  for (let attempt = 0; attempt <= retries; attempt++) {
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
     let conn: oracledb.Connection | undefined;
 
     try {
       const dbPool = await getPool();
       conn = await dbPool.getConnection();
 
-      // Very conservative settings to avoid buffer issues in Thin mode
       const result = await conn.execute<T>(sql, params, {
         outFormat: oracledb.OUT_FORMAT_OBJECT,
-        fetchArraySize: 100, 
-        prefetchRows: 0,    
+        fetchArraySize: 50,
+        maxRows: 1000,
       });
 
-      return (result.rows || []) as T[];
+      // Close connection immediately to return to pool
+      await conn.close();
+      conn = undefined;
+
+      const rows = result.rows || [];
+      const sanitized = rows.map(row => sanitizeRow(row as Record<string, unknown>)) as T[];
+
+      if (useCache && cacheKey) {
+        queryCache.set(cacheKey, { data: sanitized, expires: Date.now() + CACHE_TTL });
+      }
+
+      return sanitized;
     } catch (error: unknown) {
       const err = error as { code?: string; message?: string };
       lastError = err as Error;
 
-      // On buffer error, close connection and retry
-      if (err.code === 'ERR_BUFFER_OUT_OF_BOUNDS') {
-        console.warn(`⚠️ Buffer error on attempt ${attempt + 1}, retrying...`);
-        if (conn) {
-          try { await conn.close(); conn = undefined; } catch {}
-        }
-        await new Promise(r => setTimeout(r, 50 * (attempt + 1)));
+      if (conn) {
+        try { await conn.close(); } catch {}
+      }
+
+      const isRetryable =
+        err.code === 'ERR_BUFFER_OUT_OF_BOUNDS' ||
+        err.code === 'ORA-00018' || // Retry session limits
+        err.code?.startsWith('NJS-') ||
+        err.message?.includes('buffer') ||
+        err.message?.includes('ORA-');
+
+      if (isRetryable && attempt < maxRetries - 1) {
+        // Backoff: 1s, 2s, 4s
+        await new Promise(r => setTimeout(r, 1000 * Math.pow(2, attempt)));
         continue;
       }
 
       console.error('❌ DB Error:', err.message);
       throw err;
-    } finally {
-      if (conn) {
-        try { await conn.close(); } catch {}
-      }
     }
   }
 
@@ -99,30 +122,34 @@ export async function dbQuery<T = Record<string, unknown>>(
 }
 
 /**
- * Cached query - checks LRU cache first
+ * Sanitize row data
  */
-export async function dbQueryCached<T = Record<string, unknown>>(
-  sql: string,
-  params: Record<string, unknown> = {},
-  cacheKey?: string
-): Promise<T[]> {
-  const key = cacheKey || `q:${sql}:${JSON.stringify(params)}`;
+function sanitizeRow(row: Record<string, unknown>): Record<string, unknown> {
+  const sanitized: Record<string, unknown> = {};
 
-  const cached = queryCache.get(key);
-  if (cached !== undefined) return cached as T[];
-
-  try {
-    const result = await dbQuery<T>(sql, params);
-    queryCache.set(key, result);
-    return result;
-  } catch (error) {
-    console.error('Query failed, returning empty:', error);
-    return [];
+  for (const [key, value] of Object.entries(row)) {
+    if (value === null || value === undefined) {
+      sanitized[key] = null;
+    } else if (value instanceof Date) {
+      sanitized[key] = value.toISOString();
+    } else if (Buffer.isBuffer(value)) {
+      sanitized[key] = value.toString('utf8');
+    } else if (typeof value === 'object') {
+      try {
+        sanitized[key] = JSON.stringify(value);
+      } catch {
+        sanitized[key] = String(value);
+      }
+    } else {
+      sanitized[key] = value;
+    }
   }
+
+  return sanitized;
 }
 
 /**
- * Get single row
+ * Execute query and return single row
  */
 export async function dbQuerySingle<T = Record<string, unknown>>(
   sql: string,
@@ -133,19 +160,7 @@ export async function dbQuerySingle<T = Record<string, unknown>>(
 }
 
 /**
- * Get single row with caching
- */
-export async function dbQuerySingleCached<T = Record<string, unknown>>(
-  sql: string,
-  params: Record<string, unknown> = {},
-  cacheKey?: string
-): Promise<T | null> {
-  const rows = await dbQueryCached<T>(sql, params, cacheKey);
-  return rows[0] || null;
-}
-
-/**
- * Count query - returns number
+ * Execute count query
  */
 export async function dbCount(
   sql: string,
@@ -158,29 +173,7 @@ export async function dbCount(
 }
 
 /**
- * Cached count - returns 0 on error
- */
-export async function dbCountCached(
-  sql: string,
-  params: Record<string, unknown> = {},
-  cacheKey?: string
-): Promise<number> {
-  const key = cacheKey || `c:${sql}:${JSON.stringify(params)}`;
-
-  const cached = queryCache.get(key);
-  if (cached !== undefined) return cached as number;
-
-  try {
-    const count = await dbCount(sql, params);
-    queryCache.set(key, count);
-    return count;
-  } catch {
-    return 0;
-  }
-}
-
-/**
- * Clear all cache
+ * Clear query cache
  */
 export function clearCache() {
   queryCache.clear();
@@ -197,4 +190,14 @@ export function invalidateCache(pattern: string) {
   }
 }
 
-export default getPool;
+/**
+ * Execute query and return single row (Cached)
+ */
+export async function dbQuerySingleCached<T = Record<string, unknown>>(
+  sql: string,
+  params: Record<string, unknown>,
+  cacheKey: string
+): Promise<T | null> {
+  const rows = await dbQuery<T>(sql, params, { useCache: true, cacheKey });
+  return rows[0] || null;
+}

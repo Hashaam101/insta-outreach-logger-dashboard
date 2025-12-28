@@ -1,59 +1,37 @@
 'use server';
 
 import { auth } from "@/auth";
-import { dbQuery } from "@/lib/db";
+import { dbQuery, dbQuerySingle } from "@/lib/db";
 import { revalidatePath } from "next/cache";
-
-/**
- * UTILITY: Log an action to the AUDIT_LOGS table
- */
-async function logAudit(performedBy: string, actionType: string, targetId: string, details: object) {
-    try {
-        await dbQuery(
-            `INSERT INTO audit_logs (performed_by, action_type, target_id, details_json) 
-             VALUES (:by, :type, :target, :details)`,
-            {
-                by: performedBy,
-                type: actionType,
-                target: targetId,
-                details: JSON.stringify(details)
-            }
-        );
-    } catch (e) {
-        console.error("Audit log failed:", e);
-    }
-}
+import { GoalMetric, GoalFrequency } from "@/types/db";
 
 /**
  * 1. Transfer Actor Ownership
- * Updates the OWNER_OPERATOR in the ACTORS table.
+ * Updates the OPR_ID in the ACTORS table.
  */
 export async function transferActor(actorHandle: string, newOperatorName: string) {
     const session = await auth();
     if (!session?.user?.operator_name) throw new Error("Unauthorized");
 
     try {
-        // Fetch current owner for audit
-        const current = await dbQuery<{ OWNER_OPERATOR: string }>(
-            `SELECT owner_operator FROM actors WHERE username = :handle`,
-            { handle: actorHandle }
+        // 1. Get New Operator ID
+        const newOp = await dbQuerySingle<{ OPR_ID: string }>(
+            `SELECT OPR_ID FROM OPERATORS WHERE OPR_NAME = :name`,
+            { name: newOperatorName }
         );
 
-        if (current.length === 0) throw new Error("Actor not found");
+        if (!newOp) throw new Error(`Operator ${newOperatorName} not found`);
 
+        // 2. Update Actor
         await dbQuery(
-            `UPDATE actors SET owner_operator = :new_owner WHERE username = :handle`,
-            { new_owner: newOperatorName, handle: actorHandle }
+            `UPDATE ACTORS SET OPR_ID = :new_id WHERE ACT_USERNAME = :handle`,
+            { new_id: newOp.OPR_ID, handle: actorHandle }
         );
 
-        await logAudit(
-            session.user.operator_name, 
-            'TRANSFER_ACTOR', 
-            actorHandle, 
-            { from: current[0].OWNER_OPERATOR, to: newOperatorName }
-        );
+        console.log(`AUDIT: Actor ${actorHandle} transferred to ${newOperatorName} by ${session.user.operator_name}`);
 
         revalidatePath('/settings');
+        revalidatePath('/actors');
         return { success: true };
     } catch (e: unknown) {
         const err = e as Error;
@@ -62,31 +40,34 @@ export async function transferActor(actorHandle: string, newOperatorName: string
 }
 
 /**
- * 2. Transfer Lead Ownership
- * Updates the OWNER_ACTOR in the PROSPECTS table.
+ * 2. Transfer Lead Ownership (Logical)
+ * Since Targets are shared, this logs a 'Transfer' event to indicate handoff.
  */
 export async function transferLead(targetUsername: string, newActorHandle: string) {
     const session = await auth();
     if (!session?.user?.operator_name) throw new Error("Unauthorized");
 
     try {
-        const current = await dbQuery<{ OWNER_ACTOR: string }>(
-            `SELECT owner_actor FROM prospects WHERE target_username = :target`,
-            { target: targetUsername }
-        );
+        // Resolve IDs
+        const target = await dbQuerySingle<{ TAR_ID: string }>(`SELECT TAR_ID FROM TARGETS WHERE TAR_USERNAME = :t`, { t: targetUsername });
+        const actor = await dbQuerySingle<{ ACT_ID: string, OPR_ID: string }>(`SELECT ACT_ID, OPR_ID FROM ACTORS WHERE ACT_USERNAME = :a`, { a: newActorHandle });
+        
+        if (!target || !actor) throw new Error("Target or New Actor not found");
 
-        if (current.length === 0) throw new Error("Lead not found");
+        // Generate ID
+        const elgId = `ELG-${Date.now().toString(16).slice(-10).toUpperCase()}`; // Simple mock ID gen
 
+        // Log Event
         await dbQuery(
-            `UPDATE prospects SET owner_actor = :new_actor, last_updated = SYSTIMESTAMP WHERE target_username = :target`,
-            { new_actor: newActorHandle, target: targetUsername }
-        );
-
-        await logAudit(
-            session.user.operator_name,
-            'TRANSFER_LEAD',
-            targetUsername,
-            { from: current[0].OWNER_ACTOR, to: newActorHandle }
+            `INSERT INTO EVENT_LOGS (ELG_ID, EVENT_TYPE, ACT_ID, OPR_ID, TAR_ID, DETAILS, CREATED_AT)
+             VALUES (:id, 'Change in Tar Info', :act, :opr, :tar, :details, CURRENT_TIMESTAMP)`,
+            {
+                id: elgId,
+                act: actor.ACT_ID,
+                opr: actor.OPR_ID,
+                tar: target.TAR_ID,
+                details: `[Transfer] Ownership claimed by @${newActorHandle}`
+            }
         );
 
         revalidatePath('/leads');
@@ -99,31 +80,28 @@ export async function transferLead(targetUsername: string, newActorHandle: strin
 
 /**
  * 3. Suggest Team Goal
- * Upserts into TEAM_GOALS.
+ * Inserts a GOAL with ASSIGNED_TO_OPR = NULL
  */
-export async function suggestTeamGoal(key: string, value: number, description: string) {
+export async function suggestTeamGoal(metric: GoalMetric, value: number, frequency: GoalFrequency = 'Daily') {
     const session = await auth();
     if (!session?.user?.operator_name) throw new Error("Unauthorized");
 
     try {
-        // Using Oracle's MERGE for Upsert
-        await dbQuery(`
-            MERGE INTO team_goals t
-            USING (SELECT :key as goal_key FROM DUAL) s
-            ON (t.goal_key = s.goal_key)
-            WHEN MATCHED THEN
-                UPDATE SET suggested_value = :val, suggested_by = :by, description = :desc, updated_at = SYSTIMESTAMP
-            WHEN NOT MATCHED THEN
-                INSERT (goal_key, suggested_value, suggested_by, description)
-                VALUES (:key, :val, :by, :desc)
-        `, {
-            key,
-            val: value,
-            by: session.user.operator_name,
-            desc: description
-        });
+        const op = await dbQuerySingle<{ OPR_ID: string }>(`SELECT OPR_ID FROM OPERATORS WHERE OPR_NAME = :n`, { n: session.user.operator_name });
+        if (!op) throw new Error("Operator not found");
 
-        await logAudit(session.user.operator_name, 'UPDATE_TEAM_GOAL', key, { value });
+        const goalId = `GOL-${Date.now().toString(16).slice(-8).toUpperCase()}`;
+
+        await dbQuery(`
+            INSERT INTO GOALS (GOAL_ID, METRIC, TARGET_VALUE, FREQUENCY, ASSIGNED_TO_OPR, STATUS, SUGGESTED_BY, CREATED_AT, START_DATE)
+            VALUES (:id, :metric, :val, :freq, NULL, 'Active', :by, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        `, {
+            id: goalId,
+            metric,
+            val: value,
+            freq: frequency,
+            by: op.OPR_ID
+        });
 
         revalidatePath('/analytics');
         revalidatePath('/');
@@ -136,26 +114,33 @@ export async function suggestTeamGoal(key: string, value: number, description: s
 
 /**
  * 4. Set Personal Goal
- * Upserts into OPERATOR_GOALS.
+ * Inserts a GOAL with ASSIGNED_TO_OPR = <Me>
  */
-export async function setPersonalGoal(key: string, value: number) {
+export async function setPersonalGoal(metric: GoalMetric, value: number, frequency: GoalFrequency = 'Daily') {
     const session = await auth();
     if (!session?.user?.operator_name) throw new Error("Unauthorized");
 
     try {
+        const op = await dbQuerySingle<{ OPR_ID: string }>(`SELECT OPR_ID FROM OPERATORS WHERE OPR_NAME = :n`, { n: session.user.operator_name });
+        if (!op) throw new Error("Operator not found");
+
+        // Deactivate old personal goals for this metric
         await dbQuery(`
-            MERGE INTO operator_goals o
-            USING (SELECT :op as op_name, :key as g_key FROM DUAL) s
-            ON (o.operator_name = s.op_name AND o.goal_key = s.g_key)
-            WHEN MATCHED THEN
-                UPDATE SET personal_value = :val
-            WHEN NOT MATCHED THEN
-                INSERT (operator_name, goal_key, personal_value)
-                VALUES (:op, :key, :val)
+            UPDATE GOALS SET STATUS = 'Archived' 
+            WHERE ASSIGNED_TO_OPR = :op AND METRIC = :metric AND STATUS = 'Active'
+        `, { op: op.OPR_ID, metric });
+
+        const goalId = `GOL-${Date.now().toString(16).slice(-8).toUpperCase()}`;
+
+        await dbQuery(`
+            INSERT INTO GOALS (GOAL_ID, METRIC, TARGET_VALUE, FREQUENCY, ASSIGNED_TO_OPR, STATUS, SUGGESTED_BY, CREATED_AT, START_DATE)
+            VALUES (:id, :metric, :val, :freq, :op, 'Active', :op, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         `, {
-            op: session.user.operator_name,
-            key,
-            val: value
+            id: goalId,
+            metric,
+            val: value,
+            freq: frequency,
+            op: op.OPR_ID
         });
 
         revalidatePath('/analytics');
@@ -167,93 +152,52 @@ export async function setPersonalGoal(key: string, value: number) {
     }
 }
 
-export interface Goal {
-    key: string;
-    description: string;
-    teamValue: number;
-    suggestedBy: string;
-    updatedAt: string;
-    personalValue: number | null;
+export interface GoalView {
+    id: string;
+    metric: string;
+    targetValue: number;
+    frequency: string;
+    isTeam: boolean;
+    assignedTo?: string; // OPR_NAME
 }
 
 /**
  * 5. Get Goals Dashboard Data
- * Returns a merged view of Team vs Personal goals.
  */
-export async function getGoalsDashboardData(): Promise<Goal[] | null> {
-    const session = await auth();
-    if (!session?.user?.operator_name) return null;
-
+export async function getGoalsDashboardData(): Promise<GoalView[]> {
     try {
+        // Fetch Active Team Goals and Personal Goals
         const goals = await dbQuery<{
-            GOAL_KEY: string;
-            DESCRIPTION: string;
-            SUGGESTED_VALUE: string | number;
-            SUGGESTED_BY: string;
-            UPDATED_AT: string;
-            PERSONAL_VALUE: string | number | null;
+            GOAL_ID: string;
+            METRIC: string;
+            TARGET_VALUE: number;
+            FREQUENCY: string;
+            ASSIGNED_TO_OPR: string | null;
+            OPR_NAME?: string;
         }>(`
             SELECT 
-                t.goal_key, 
-                t.description, 
-                t.suggested_value, 
-                t.suggested_by, 
-                t.updated_at,
-                o.personal_value
-            FROM team_goals t
-            LEFT JOIN operator_goals o ON t.goal_key = o.goal_key AND o.operator_name = :op
-            ORDER BY t.goal_key ASC
-        `, { op: session.user.operator_name });
+                g.GOAL_ID, 
+                g.METRIC, 
+                g.TARGET_VALUE, 
+                g.FREQUENCY, 
+                g.ASSIGNED_TO_OPR,
+                o.OPR_NAME
+            FROM GOALS g
+            LEFT JOIN OPERATORS o ON g.ASSIGNED_TO_OPR = o.OPR_ID
+            WHERE g.STATUS = 'Active'
+            ORDER BY g.CREATED_AT DESC
+        `);
 
         return goals.map((g) => ({
-            key: g.GOAL_KEY,
-            description: g.DESCRIPTION,
-            teamValue: Number(g.SUGGESTED_VALUE),
-            suggestedBy: g.SUGGESTED_BY,
-            updatedAt: g.UPDATED_AT,
-            personalValue: g.PERSONAL_VALUE !== null ? Number(g.PERSONAL_VALUE) : null
+            id: g.GOAL_ID,
+            metric: g.METRIC,
+            targetValue: g.TARGET_VALUE,
+            frequency: g.FREQUENCY,
+            isTeam: !g.ASSIGNED_TO_OPR,
+            assignedTo: g.OPR_NAME
         }));
     } catch (e) {
         console.error("Goals fetch failed:", e);
-        return [];
-    }
-}
-
-export interface AuditLogEntry {
-    by: string;
-    type: string;
-    target: string;
-    details: { value: number };
-    at: string;
-}
-
-/**
- * 6. Get Recent Goal Changes
- */
-export async function getRecentGoalChanges(): Promise<AuditLogEntry[]> {
-    try {
-        const logs = await dbQuery<{
-            PERFORMED_BY: string;
-            ACTION_TYPE: string;
-            TARGET_ID: string;
-            DETAILS_JSON: string;
-            TIMESTAMP: string;
-        }>(`
-            SELECT performed_by, action_type, target_id, details_json, timestamp
-            FROM audit_logs
-            WHERE action_type = 'UPDATE_TEAM_GOAL'
-            ORDER BY timestamp DESC
-            FETCH FIRST 5 ROWS ONLY
-        `);
-
-        return logs.map((l) => ({
-            by: l.PERFORMED_BY,
-            type: l.ACTION_TYPE,
-            target: l.TARGET_ID,
-            details: JSON.parse(l.DETAILS_JSON),
-            at: l.TIMESTAMP
-        }));
-    } catch {
         return [];
     }
 }

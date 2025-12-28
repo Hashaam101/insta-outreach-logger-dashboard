@@ -1,20 +1,42 @@
 import { auth } from "@/auth";
-import { dbQuery } from "@/lib/db";
+import { getPagedLogs } from "@/lib/data";
 import { DataTable } from "@/components/ui/data-table";
 import { columns } from "./columns";
 import { Clock, ShieldCheck } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { OutreachLog } from "@/lib/data";
+import { LogsScopeFilter } from "@/components/logs/logs-scope-filter";
 
-export default async function LogsPage() {
+type SearchParams = Promise<{ [key: string]: string | string[] | undefined }>
+
+export default async function LogsPage(props: {
+  searchParams: SearchParams
+}) {
   const session = await auth();
+  const searchParams = await props.searchParams;
+  const page = Number(searchParams.page) || 1;
+  const pageSize = 20;
 
-  const logs = await dbQuery<OutreachLog>(
-    `SELECT l.target_username, l.message_text, TO_CHAR(l.created_at, 'YYYY-MM-DD HH24:MI:SS') as created_at, a.owner_operator, l.actor_username
-     FROM outreach_logs l
-     LEFT JOIN actors a ON l.actor_username = a.username
-     ORDER BY l.created_at DESC
-     FETCH FIRST 100 ROWS ONLY`
+  // Determine filters based on scope
+  const scope = typeof searchParams.scope === 'string' ? searchParams.scope : 'operator';
+  const actorParam = typeof searchParams.actor === 'string' ? searchParams.actor : undefined;
+  
+  let operatorFilter: string | undefined = undefined;
+  let actorFilter: string | undefined = undefined;
+
+  if (scope === 'operator') {
+    operatorFilter = session?.user?.operator_name;
+  } else if (scope === 'actor' && actorParam) {
+    actorFilter = actorParam;
+  }
+  // if scope === 'all', filters remain undefined
+
+  const { data: logs, metadata } = await getPagedLogs(
+    page,
+    pageSize,
+    {
+      operatorName: operatorFilter,
+      actorUsername: actorFilter
+    }
   );
 
   return (
@@ -34,27 +56,27 @@ export default async function LogsPage() {
 
       <div className="grid gap-6 grid-cols-1">
         <Card className="border-primary/10 bg-card/40 backdrop-blur-sm border-2 rounded-2xl overflow-hidden">
-          <CardHeader className="border-b border-primary/5 bg-primary/5 flex flex-row items-center justify-between">
+          <CardHeader className="border-b border-primary/5 bg-primary/5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
             <div className="flex items-center gap-2">
                 <Clock className="h-4 w-4 text-primary" />
                 <div>
                     <CardTitle className="text-base">Real-time Stream</CardTitle>
                     <CardDescription className="text-[10px]">
-                        Last 100 outreach events logged
+                        Page {metadata.page} of {metadata.pageCount} • {metadata.total} total events
                     </CardDescription>
                 </div>
             </div>
-            {session?.user?.operator_name && (
-                <div className="bg-primary/10 px-3 py-1 rounded-full text-primary text-[10px] font-bold border border-primary/20">
-                    AUDIT ACTIVE: {session.user.operator_name}
-                </div>
-            )}
+            
+            <LogsScopeFilter operatorName={session?.user?.operator_name} />
           </CardHeader>
           <CardContent className="p-0">
             <DataTable 
                 columns={columns} 
                 data={logs} 
-                pageSize={20}
+                pageSize={pageSize}
+                enableServerPagination={true}
+                pageCount={metadata.pageCount}
+                currentPage={metadata.page}
             />
           </CardContent>
         </Card>

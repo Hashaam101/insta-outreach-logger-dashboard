@@ -1,38 +1,25 @@
 import { auth } from "@/auth";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
-import { dbQuery } from "@/lib/db";
 import { Instagram, Shield, User, Landmark } from "lucide-react";
 import { ActorCard } from "@/components/dashboard/ActorCard";
 import { GoalsDashboard } from "@/components/governance/goals-dashboard";
-import { getGoalsDashboardData, getRecentGoalChanges } from "@/app/actions/governance";
-
-interface Actor {
-    USERNAME: string;
-    OWNER_OPERATOR: string;
-    STATUS: string;
-}
-
-interface Operator {
-    OPERATOR_NAME: string;
-}
-
-async function getTeamData() {
-    try {
-        const actors = await dbQuery<Actor>(`SELECT username, owner_operator, status FROM ACTORS`);
-        const operators = await dbQuery<Operator>(`SELECT operator_name FROM OPERATORS`);
-        return { actors, operators };
-    } catch {
-        return { actors: [], operators: [] };
-    }
-}
+import { getGoalsDashboardData } from "@/app/actions/governance";
+import { IdTag } from "@/components/ui/id-tag";
+import { getCachedActorsWithStats, getCachedOperators, ActorWithStats, OperatorBasic } from "@/lib/data";
 
 export default async function SettingsPage() {
   const session = await auth();
-  const { actors, operators } = await getTeamData();
+
+  // Use cached functions instead of direct DB queries
+  const actors = await getCachedActorsWithStats() as ActorWithStats[];
+  const operators = await getCachedOperators() as OperatorBasic[];
   const goalsData = await getGoalsDashboardData();
-  const recentLogs = await getRecentGoalChanges();
+  
+  const recentLogs: any[] = []; 
+
+  // Find my ID
+  const myOp = operators.find(o => o.OPR_NAME === session?.user?.operator_name);
 
   return (
     <div className="flex flex-col gap-10 pb-10">
@@ -50,7 +37,7 @@ export default async function SettingsPage() {
       </div>
 
       {/* 1. Governance & Goals */}
-      <GoalsDashboard initialGoals={goalsData || []} recentLogs={recentLogs || []} />
+      <GoalsDashboard initialGoals={goalsData || []} recentLogs={recentLogs} />
 
       <div className="grid gap-6 md:grid-cols-2">
         {/* 2. Identity Section */}
@@ -71,8 +58,11 @@ export default async function SettingsPage() {
             </div>
             <div className="space-y-2">
               <Label className="text-[10px] uppercase font-bold text-muted-foreground">Operator ID</Label>
-              <div className="p-3 rounded-xl bg-primary/5 border border-primary/20 text-primary font-bold text-sm">
-                  {session?.user?.operator_name || "Unassigned"}
+              <div className="flex items-center gap-2">
+                  <div className="p-3 rounded-xl bg-primary/5 border border-primary/20 text-primary font-bold text-sm flex-1">
+                      {session?.user?.operator_name || "Unassigned"}
+                  </div>
+                  {myOp && <IdTag id={myOp.OPR_ID} className="h-11" />}
               </div>
             </div>
           </CardContent>
@@ -88,11 +78,12 @@ export default async function SettingsPage() {
             <CardDescription>All registered operators in the system.</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-col gap-2">
                 {operators.map((op) => (
-                    <Badge key={op.OPERATOR_NAME} variant="outline" className="bg-background/50 border-primary/10 py-1.5 px-4 text-xs font-medium">
-                        {op.OPERATOR_NAME}
-                    </Badge>
+                    <div key={op.OPR_ID} className="flex items-center justify-between p-2 rounded-lg bg-background/50 border border-primary/5">
+                        <span className="text-xs font-medium">{op.OPR_NAME}</span>
+                        <IdTag id={op.OPR_ID} />
+                    </div>
                 ))}
             </div>
           </CardContent>
@@ -110,7 +101,7 @@ export default async function SettingsPage() {
           <CardContent>
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                 {actors.map((actor) => (
-                    <ActorCard key={actor.USERNAME} actor={actor} operators={operators} />
+                    <ActorCard key={actor.ACT_ID} actor={actor} operators={operators} />
                 ))}
             </div>
           </CardContent>

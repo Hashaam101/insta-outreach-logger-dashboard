@@ -1,34 +1,37 @@
 import { auth } from "@/auth";
-import { dbQuery } from "@/lib/db";
+import { dbQuerySingle, dbQuery } from "@/lib/db";
 import { redirect } from "next/navigation";
 import { OnboardingForm } from "./onboarding-form";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import Image from "next/image";
 
 export default async function OnboardingPage() {
   const session = await auth();
 
-  if (!session?.user) {
+  if (!session?.user?.email) {
     redirect("/login");
   }
 
-  if (session.user.operator_name) {
-    redirect("/");
-  }
-
-  // Fetch existing operators to allow claiming
-  const operatorsData = await dbQuery<{ OPERATOR_NAME: string, IS_CLAIMED: string | number }>(
-    `SELECT 
-        o.operator_name, 
-        CASE WHEN u.email IS NOT NULL THEN 1 ELSE 0 END as IS_CLAIMED
-     FROM operators o
-     LEFT JOIN users u ON o.operator_name = u.operator_name`
+  // 1. Check if I already exist
+  const myOperator = await dbQuerySingle<{ OPR_NAME: string, OPR_EMAIL: string }>(
+    `SELECT OPR_NAME, OPR_EMAIL FROM OPERATORS WHERE OPR_EMAIL = :email`,
+    { email: session.user.email }
   );
 
-  const operators = operatorsData.map(op => ({
-    name: op.OPERATOR_NAME,
-    isClaimed: Boolean(Number(op.IS_CLAIMED))
-  }));
+  // If signup is already done, skip onboarding
+  if (myOperator) {
+      redirect("/");
+  }
+
+  // 2. Fetch all names taken by OTHER emails to prevent collision
+  // We don't need full operator objects, just the list of forbidden names
+  const takenNamesData = await dbQuery<{ OPR_NAME: string }>(
+    `SELECT OPR_NAME FROM OPERATORS WHERE OPR_EMAIL != :email`,
+    { email: session.user.email }
+  );
+
+  const unavailableNames = takenNamesData.map(op => op.OPR_NAME);
 
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
@@ -44,17 +47,37 @@ export default async function OnboardingPage() {
             </div>
             <div className="space-y-1">
                 <h1 className="text-4xl font-semibold">Establish Identity</h1>
-                <p className="text-muted-foreground font-medium">Link your Google account to an outreach persona.</p>
+                <p className="text-muted-foreground font-medium">
+                    {myOperator 
+                        ? `Welcome back, ${myOperator.OPR_NAME}` 
+                        : "Link your Google account to an outreach persona."}
+                </p>
             </div>
         </div>
 
-        <Card className="border-primary/10 bg-card/40 backdrop-blur-xl border-2 rounded-3xl shadow-2xl shadow-primary/5">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xl">Operator Onboarding</CardTitle>
-            <CardDescription>Select your team name or create a new one if you&apos;re new.</CardDescription>
+        <Card className="border-primary/10 bg-card/40 backdrop-blur-xl border-2 rounded-3xl shadow-2xl shadow-primary/5 overflow-hidden">
+          <CardHeader className="pb-4 border-b border-primary/5 bg-primary/5">
+            <div className="flex items-center gap-4">
+                <Avatar className="h-12 w-12 border-2 border-primary/20">
+                    <AvatarImage src={session.user.image || ""} alt={session.user.name || ""} />
+                    <AvatarFallback className="bg-primary/10 text-primary font-bold">
+                        {session.user.name?.[0] || "U"}
+                    </AvatarFallback>
+                </Avatar>
+                <div className="space-y-1">
+                    <CardTitle className="text-xl">Operator Onboarding</CardTitle>
+                    <CardDescription className="text-xs leading-none">
+                        Confirm your identity to access the dashboard.
+                    </CardDescription>
+                </div>
+            </div>
           </CardHeader>
-          <CardContent className="pt-6">
-            <OnboardingForm initialOperators={operators} />
+          <CardContent className="pt-8">
+            <OnboardingForm 
+                unavailableNames={unavailableNames}
+                googleName={session.user.name || ""} 
+                currentOperatorName={myOperator?.OPR_NAME}
+            />
           </CardContent>
         </Card>
 

@@ -8,6 +8,7 @@ import {
   getPaginationRowModel,
   useReactTable,
 } from "@tanstack/react-table"
+import { useRouter, usePathname, useSearchParams } from "next/navigation"
 
 import {
   Table,
@@ -25,27 +26,60 @@ interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[]
   data: TData[]
   pageSize?: number
+  enableServerPagination?: boolean
+  pageCount?: number // Total pages from server
+  currentPage?: number // 1-based index from server
 }
 
 export function DataTable<TData, TValue>({
   columns,
   data,
   pageSize = 15,
+  enableServerPagination = false,
+  pageCount: serverPageCount = -1,
+  currentPage: serverPage = 1,
 }: DataTableProps<TData, TValue>) {
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+
+  // Manage pagination state
+  const [pagination, setPagination] = React.useState({
+    pageIndex: enableServerPagination ? serverPage - 1 : 0,
+    pageSize,
+  })
+
+  // Sync with server props if enabled
+  React.useEffect(() => {
+    if (enableServerPagination) {
+      setPagination(prev => ({ ...prev, pageIndex: serverPage - 1 }))
+    }
+  }, [enableServerPagination, serverPage])
+
   const table = useReactTable({
     data,
     columns,
     getCoreRowModel: getCoreRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
-    initialState: {
-      pagination: {
-        pageSize,
-      },
+    getPaginationRowModel: enableServerPagination ? undefined : getPaginationRowModel(),
+    manualPagination: enableServerPagination,
+    pageCount: enableServerPagination ? serverPageCount : undefined,
+    state: {
+      pagination,
     },
+    onPaginationChange: setPagination,
   })
 
-  const pageCount = table.getPageCount()
-  const currentPage = table.getState().pagination.pageIndex + 1
+  // Helper for server-side navigation
+  const navigateToPage = (pageIndex: number) => {
+    const params = new URLSearchParams(searchParams?.toString())
+    params.set('page', (pageIndex + 1).toString())
+    router.push(`${pathname}?${params.toString()}`)
+  }
+
+  // Use either table's calculated page count (client) or prop (server)
+  const finalPageCount = enableServerPagination ? serverPageCount : table.getPageCount()
+  const currentPageIndex = table.getState().pagination.pageIndex
+  const displayPage = currentPageIndex + 1
 
   return (
     <div className="w-full">
@@ -71,7 +105,7 @@ export function DataTable<TData, TValue>({
           </TableHeader>
           <TableBody>
             {table.getRowModel().rows?.length ? (
-              table.getPaginationRowModel().rows.map((row) => (
+              table.getRowModel().rows.map((row) => (
                 <TableRow
                   key={row.id}
                   data-state={row.getIsSelected() && "selected"}
@@ -98,17 +132,17 @@ export function DataTable<TData, TValue>({
       </div>
 
       {/* Pagination */}
-      {pageCount > 1 && (
+      {finalPageCount > 1 && (
         <div className="flex items-center justify-between px-4 py-3 border-t border-primary/5">
           <div className="text-xs text-muted-foreground">
-            Page {currentPage} of {pageCount} ({data.length} total)
+            Page {displayPage} of {finalPageCount} ({enableServerPagination ? 'server-side' : data.length + ' total'})
           </div>
           <div className="flex items-center gap-1">
             <Button
               variant="ghost"
               size="icon"
               className="h-8 w-8"
-              onClick={() => table.setPageIndex(0)}
+              onClick={() => enableServerPagination ? navigateToPage(0) : table.setPageIndex(0)}
               disabled={!table.getCanPreviousPage()}
             >
               <ChevronsLeft className="h-4 w-4" />
@@ -117,35 +151,35 @@ export function DataTable<TData, TValue>({
               variant="ghost"
               size="icon"
               className="h-8 w-8"
-              onClick={() => table.previousPage()}
+              onClick={() => enableServerPagination ? navigateToPage(currentPageIndex - 1) : table.previousPage()}
               disabled={!table.getCanPreviousPage()}
             >
               <ChevronLeft className="h-4 w-4" />
             </Button>
 
             <div className="flex items-center gap-1 mx-2">
-              {Array.from({ length: Math.min(5, pageCount) }, (_, i) => {
+              {Array.from({ length: Math.min(5, finalPageCount) }, (_, i) => {
                 let pageNum: number
-                if (pageCount <= 5) {
+                if (finalPageCount <= 5) {
                   pageNum = i + 1
-                } else if (currentPage <= 3) {
+                } else if (displayPage <= 3) {
                   pageNum = i + 1
-                } else if (currentPage >= pageCount - 2) {
-                  pageNum = pageCount - 4 + i
+                } else if (displayPage >= finalPageCount - 2) {
+                  pageNum = finalPageCount - 4 + i
                 } else {
-                  pageNum = currentPage - 2 + i
+                  pageNum = displayPage - 2 + i
                 }
 
                 return (
                   <Button
                     key={pageNum}
-                    variant={currentPage === pageNum ? "default" : "ghost"}
+                    variant={displayPage === pageNum ? "default" : "ghost"}
                     size="icon"
                     className={cn(
                       "h-8 w-8 text-xs",
-                      currentPage === pageNum && "bg-primary text-primary-foreground"
+                      displayPage === pageNum && "bg-primary text-primary-foreground"
                     )}
-                    onClick={() => table.setPageIndex(pageNum - 1)}
+                    onClick={() => enableServerPagination ? navigateToPage(pageNum - 1) : table.setPageIndex(pageNum - 1)}
                   >
                     {pageNum}
                   </Button>
@@ -157,7 +191,7 @@ export function DataTable<TData, TValue>({
               variant="ghost"
               size="icon"
               className="h-8 w-8"
-              onClick={() => table.nextPage()}
+              onClick={() => enableServerPagination ? navigateToPage(currentPageIndex + 1) : table.nextPage()}
               disabled={!table.getCanNextPage()}
             >
               <ChevronRight className="h-4 w-4" />
@@ -166,7 +200,7 @@ export function DataTable<TData, TValue>({
               variant="ghost"
               size="icon"
               className="h-8 w-8"
-              onClick={() => table.setPageIndex(table.getPageCount() - 1)}
+              onClick={() => enableServerPagination ? navigateToPage(finalPageCount - 1) : table.setPageIndex(finalPageCount - 1)}
               disabled={!table.getCanNextPage()}
             >
               <ChevronsRight className="h-4 w-4" />

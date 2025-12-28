@@ -1,45 +1,72 @@
 'use server';
 
-import { auth } from "@/auth";
+import { auth, signOut } from "@/auth";
 import { dbQuery, dbQuerySingle } from "@/lib/db";
 import { revalidatePath } from "next/cache";
+
+export async function signOutAction() {
+    await signOut({ redirectTo: "/login" });
+}
 
 /**
  * Establishment of Operator Identity
  * Used during the onboarding flow.
  */
-export async function setOperatorName(name: string) {
+export async function setOperatorName(rawName: string) {
   const session = await auth();
   if (!session?.user?.email) {
     return { success: false, error: "Authentication required" };
   }
 
+  const email = session.user.email;
+  // Truncate to 32 chars as per schema
+  const name = rawName.slice(0, 32);
+
   try {
-    // 1. Check if name is already claimed by someone else
-    const existing = await dbQuerySingle<{ EMAIL: string }>(
-        `SELECT email FROM users WHERE operator_name = :name`,
+    // 1. Check if I already exist
+    const myRow = await dbQuerySingle<{ OPR_ID: string, OPR_NAME: string }>(
+        `SELECT OPR_ID, OPR_NAME FROM OPERATORS WHERE OPR_EMAIL = :email`,
+        { email }
+    );
+
+    // 2. Check if target Name exists
+    const targetRow = await dbQuerySingle<{ OPR_ID: string, OPR_EMAIL: string }>(
+        `SELECT OPR_ID, OPR_EMAIL FROM OPERATORS WHERE OPR_NAME = :name`,
         { name }
     );
 
-    if (existing && existing.EMAIL !== session.user.email) {
-        return { success: false, error: "This name is already claimed by another operator." };
+    if (myRow && targetRow) {
+        if (myRow.OPR_ID === targetRow.OPR_ID) {
+            // I am already this operator. Do nothing.
+            return { success: true };
+        }
+        // I exist, Target exists (and is distinct).
+        // Cannot merge two existing operators easily without handling foreign keys.
+        return { success: false, error: "Name is already taken by another operator." };
     }
 
-    // 2. Upsert into OPERATORS table
-    await dbQuery(
-        `MERGE INTO operators t
-         USING (SELECT :name as op_name FROM DUAL) s
-         ON (t.operator_name = s.op_name)
-         WHEN NOT MATCHED THEN
-            INSERT (operator_name, created_at) VALUES (s.op_name, SYSTIMESTAMP)`,
-        { name }
-    );
-
-    // 3. Link user to operator
-    await dbQuery(
-        `UPDATE users SET operator_name = :name WHERE email = :email`,
-        { name, email: session.user.email }
-    );
+    if (myRow && !targetRow) {
+        // Case C: Rename myself
+        await dbQuery(
+            `UPDATE OPERATORS SET OPR_NAME = :name WHERE OPR_ID = :id`,
+            { name, id: myRow.OPR_ID }
+        );
+    } else if (!myRow && targetRow) {
+        // Case B: Claim existing (Seed) account
+        // We overwrite the seed email with the real user email
+        await dbQuery(
+            `UPDATE OPERATORS SET OPR_EMAIL = :email WHERE OPR_ID = :id`,
+            { email, id: targetRow.OPR_ID }
+        );
+    } else {
+        // Case A: Fresh Insert
+        const newId = `OPR-${Date.now().toString(16).slice(-8).toUpperCase()}`;
+        await dbQuery(
+            `INSERT INTO OPERATORS (OPR_ID, OPR_EMAIL, OPR_NAME, OPR_STATUS, CREATED_AT, LAST_ACTIVITY)
+             VALUES (:id, :email, :name, 'online', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+            { id: newId, email, name }
+        );
+    }
 
     revalidatePath('/', 'layout');
     return { success: true };

@@ -1,5 +1,3 @@
-"use client"
-
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { User, Users, TrendingUp, Zap } from "lucide-react"
@@ -7,9 +5,9 @@ import { cn } from "@/lib/utils"
 
 interface OperatorStatsProps {
     data: {
-        MY_LOGS_24H: number
-        TEAM_LOGS_24H: number
-        ACTIVE_OPERATORS: number
+        MY_LOGS_24H: string | number
+        TEAM_LOGS_24H: string | number
+        ACTIVE_OPERATORS: string | number
     }
 }
 

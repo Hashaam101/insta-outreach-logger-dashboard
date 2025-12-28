@@ -24,7 +24,7 @@ export default async function DashboardLayout({
 
   return (
     <SidebarProvider>
-      <div className="flex min-h-screen bg-background text-foreground overflow-hidden">
+      <div className="flex h-screen bg-background text-foreground overflow-hidden">
         {/* Desktop Sidebar */}
         <div className="hidden lg:block w-64 shrink-0 border-r">
           <Sidebar session={session} />

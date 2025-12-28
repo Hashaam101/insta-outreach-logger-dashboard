@@ -19,46 +19,52 @@ import { Separator } from "@/components/ui/separator"
 import { 
     setPersonalGoal, 
     suggestTeamGoal,
-    Goal,
-    AuditLogEntry
+    GoalView
 } from "@/app/actions/governance"
 import { toast } from "sonner"
+import { GoalMetric } from "@/types/db"
+
+// Local definition since we removed AuditLog logic for now
+type AuditLogEntry = any;
 
 export function GoalsDashboard({ 
     initialGoals, 
     recentLogs 
 }: { 
-    initialGoals: Goal[], 
+    initialGoals: GoalView[], 
     recentLogs: AuditLogEntry[] 
 }) {
     const [goals, setGoals] = React.useState(initialGoals)
-    const [editingKey, setEditingKey] = React.useState<string | null>(null)
+    const [editingId, setEditingId] = React.useState<string | null>(null)
     const [editType, setEditType] = React.useState<'team' | 'personal' | null>(null)
     const [editValue, setEditValue] = React.useState<string>("")
     const [isPending, setIsPending] = React.useState(false)
 
     const handleSave = async () => {
-        if (!editingKey || !editType || isNaN(Number(editValue))) return;
+        if (!editingId || !editType || isNaN(Number(editValue))) return;
         
+        const goal = goals.find(g => g.id === editingId);
+        if (!goal) return;
+
         setIsPending(true)
         const val = Number(editValue)
         
+        // Note: Actions now expect Metric enum. 
         const res = editType === 'team' 
-            ? await suggestTeamGoal(editingKey, val, goals.find(g => g.key === editingKey)?.description || "")
-            : await setPersonalGoal(editingKey, val);
+            ? await suggestTeamGoal(goal.metric as GoalMetric, val)
+            : await setPersonalGoal(goal.metric as GoalMetric, val);
 
         if (res.success) {
             toast.success(`${editType === 'team' ? 'Team' : 'Personal'} goal updated`);
-            // Update local state for immediate feedback
             setGoals(prev => prev.map(g => {
-                if (g.key === editingKey) {
-                    return editType === 'team' 
-                        ? { ...g, teamValue: val, suggestedBy: 'Me', updatedAt: new Date().toISOString() }
-                        : { ...g, personalValue: val }
+                if (g.id === editingId) {
+                    // Update local state optimistically
+                    // In a real app, revalidatePath handles this, but for instant feedback:
+                    return { ...g, targetValue: val }
                 }
                 return g
             }));
-            setEditingKey(null);
+            setEditingId(null);
         } else {
             toast.error(res.error || "Save failed")
         }
@@ -80,11 +86,11 @@ export function GoalsDashboard({
                 </CardHeader>
                 <CardContent className="space-y-6">
                     {goals.map((goal) => (
-                        <div key={goal.key} className="space-y-4">
+                        <div key={goal.id} className="space-y-4">
                             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                                 <div className="space-y-1">
-                                    <h4 className="font-bold text-sm tracking-tight">{goal.key}</h4>
-                                    <p className="text-xs text-muted-foreground">{goal.description}</p>
+                                    <h4 className="font-bold text-sm tracking-tight">{goal.metric}</h4>
+                                    <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">{goal.frequency}</p>
                                 </div>
                                 <div className="flex items-center gap-3">
                                     {/* Team Box */}
@@ -92,20 +98,24 @@ export function GoalsDashboard({
                                         <p className="text-[8px] uppercase font-bold text-muted-foreground mb-1 flex items-center justify-center gap-1">
                                             <Users className="h-2 w-2" /> Team
                                         </p>
-                                        <p className="text-xl font-bold">{goal.teamValue}</p>
-                                        <p className="text-[8px] text-muted-foreground mt-1">By: {goal.suggestedBy}</p>
-                                        <Button 
-                                            variant="ghost" 
-                                            size="icon" 
-                                            onClick={() => {
-                                                setEditingKey(goal.key);
-                                                setEditType('team');
-                                                setEditValue(goal.teamValue.toString());
-                                            }}
-                                            className="h-5 w-5 absolute -top-1 -right-1 opacity-0 group-hover:opacity-100 bg-background border border-primary/10"
-                                        >
-                                            <Edit3 className="h-2 w-2" />
-                                        </Button>
+                                        <p className="text-xl font-bold">{goal.isTeam ? goal.targetValue : "—"}</p>
+                                        <p className="text-[8px] text-muted-foreground mt-1 truncate max-w-[80px]">
+                                            {goal.isTeam ? (goal.assignedTo ? `By: ${goal.assignedTo}` : "Default") : "Custom"}
+                                        </p>
+                                        {goal.isTeam && (
+                                            <Button 
+                                                variant="ghost" 
+                                                size="icon" 
+                                                onClick={() => {
+                                                    setEditingId(goal.id);
+                                                    setEditType('team');
+                                                    setEditValue(goal.targetValue.toString());
+                                                }}
+                                                className="h-5 w-5 absolute -top-1 -right-1 opacity-0 group-hover:opacity-100 bg-background border border-primary/10"
+                                            >
+                                                <Edit3 className="h-2 w-2" />
+                                            </Button>
+                                        )}
                                     </div>
 
                                     <ArrowRight className="h-4 w-4 text-muted-foreground opacity-20" />
@@ -116,18 +126,18 @@ export function GoalsDashboard({
                                             <User className="h-2 w-2" /> My Limit
                                         </p>
                                         <p className="text-xl font-bold text-primary">
-                                            {goal.personalValue ?? goal.teamValue}
+                                            {!goal.isTeam ? goal.targetValue : goal.targetValue}
                                         </p>
                                         <p className="text-[8px] text-primary/60 mt-1 uppercase font-bold">
-                                            {goal.personalValue ? "Override" : "Using Default"}
+                                            {!goal.isTeam ? "Override" : "Using Default"}
                                         </p>
                                         <Button 
                                             variant="ghost" 
                                             size="icon" 
                                             onClick={() => {
-                                                setEditingKey(goal.key);
+                                                setEditingId(goal.id);
                                                 setEditType('personal');
-                                                setEditValue((goal.personalValue ?? goal.teamValue).toString());
+                                                setEditValue(goal.targetValue.toString());
                                             }}
                                             className="h-5 w-5 absolute -top-1 -right-1 opacity-0 group-hover:opacity-100 bg-background border border-primary/10"
                                         >
@@ -137,13 +147,13 @@ export function GoalsDashboard({
                                 </div>
                             </div>
 
-                            {editingKey === goal.key && (
+                            {editingId === goal.id && (
                                 <div className="bg-primary/5 p-4 rounded-xl border border-primary/20 flex flex-col gap-3 animate-in fade-in slide-in-from-top-2">
                                     <div className="flex items-center justify-between">
                                         <p className="text-xs font-bold uppercase tracking-widest text-primary">
                                             Editing {editType === 'team' ? 'Team Suggestion' : 'Personal Override'}
                                         </p>
-                                        <Button variant="ghost" size="sm" className="h-6 text-[10px]" onClick={() => setEditingKey(null)}>Cancel</Button>
+                                        <Button variant="ghost" size="sm" className="h-6 text-[10px]" onClick={() => setEditingId(null)}>Cancel</Button>
                                     </div>
                                     <div className="flex gap-2">
                                         <Input 
@@ -162,6 +172,9 @@ export function GoalsDashboard({
                             <Separator className="opacity-50" />
                         </div>
                     ))}
+                    {goals.length === 0 && (
+                        <p className="text-center text-xs text-muted-foreground italic">No active goals configured.</p>
+                    )}
                 </CardContent>
             </Card>
 
@@ -182,12 +195,8 @@ export function GoalsDashboard({
                                 </div>
                                 <div className="space-y-1">
                                     <p className="text-[11px] leading-tight">
-                                        <span className="font-bold text-foreground">{log.by}</span> updated 
-                                        <span className="text-primary font-bold"> {log.target}</span> to 
-                                        <span className="bg-primary/10 text-primary px-1 rounded ml-1 font-bold">{log.details.value}</span>
-                                    </p>
-                                    <p className="text-[9px] text-muted-foreground">
-                                        {new Date(log.at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                        {/* Mocking display since audit logs are removed */}
+                                        <span className="font-bold text-foreground">System Update</span>
                                     </p>
                                 </div>
                             </div>

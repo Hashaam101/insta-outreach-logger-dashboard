@@ -18,11 +18,21 @@ Instagram employs sophisticated anti-bot detection that monitors network request
 ### Component Breakdown
 | Layer | Technology | Role |
 | :--- | :--- | :--- |
-| **Frontend Logger** | Chrome Extension (v3) | Captures DMs and Scraping events. |
-| **Stealth Bridge** | Python (IPC Server) | Enriches browser data with Operator ID; saves to local SQLite. |
-| **Sync Engine** | Python (Oracle SDK) | "GitHub-Style" Delta Sync between Local SQLite and Cloud Oracle. |
-| **Cloud Core** | Oracle ATP (Always Free) | The central source of truth for the entire distributed team. |
-| **Command Center** | Next.js 16 + React 19 | Management, Analytics, and CRM write-layer. |
+| **Desktop Agent** | Python/Chrome | Handles stealthy DM logging via Chrome Native Messaging. |
+| **Oracle ATP** | Cloud Core | Central source of truth. Handles ID generation and Delta Sync. |
+| **Web Dashboard** | Next.js 16 | The "Command Center" for Analytics, CRM, and Governance. |
+
+### Architecture Diagram
+```
++------------------+     +------------------+     +------------------+
+|  DESKTOP AGENT   |     |   ORACLE ATP     |     |  WEB DASHBOARD   |
+|  (Python/Chrome) |<--->|  (Cloud Core)    |<--->|   (Next.js 16)   |
++------------------+     +------------------+     +------------------+
+        |                        |                        |
+   Chrome Ext v3           Source of Truth          Command Center
+   Stealth Bridge          Delta Sync               Analytics & CRM
+   Local SQLite            ID Generation            Governance UI
+```
 
 ### Data Flow: The "Stealth Bridge"
 1. **Capture:** Browser Extension detects a sent DM.
@@ -35,60 +45,62 @@ Instagram employs sophisticated anti-bot detection that monitors network request
 
 ## 🗄️ 3. Oracle Database Relational Model (Verified)
 
-The system uses a highly optimized schema designed for high-concurrency and low-bandwidth delta syncing.
+The system uses a normalized Oracle schema with standardized ID formats.
 
-### **A. User & Identity Management**
-*   **`USERS`**: The link between Auth identities and outreach personas.
-    *   `EMAIL` (PK): Google Account email.
-    *   `NAME`: Human name from Google.
-    *   `OPERATOR_NAME`: The "Identity" used in the outreach logs.
-*   **`OPERATORS`**: The global directory.
-    *   `OPERATOR_NAME` (PK): Primary identifier for a team member.
+### **Core Entities**
+*   **`OPERATORS`** (`OPR-A1DC2A4B`): Human team members.
+*   **`ACTORS`** (`ACT-A1DC2A4B`): Instagram accounts owned by operators.
+*   **`TARGETS`** (`TAR-A1dC2h4B`): Prospect leads with pipeline status.
 
-### **Outreach Tables**
-- **`ACTORS`**: Instagram accounts used for outreach.
-  - `USERNAME` (PK), `OWNER_OPERATOR`, `STATUS`, `CREATED_AT`
-- **`ACTOR_PROFILES`**: Relationship between accounts and operators.
-  - `ACTOR_USERNAME`, `ASSIGNED_OPERATOR`, `CREATED_AT`
-- **`PROSPECTS`**: Master list of leads and their status.
-  - `TARGET_USERNAME` (PK), `STATUS`, `OWNER_ACTOR`, `NOTES`, `FIRST_CONTACTED`, `LAST_UPDATED`, `EMAIL`, `PHONE_NUMBER`, `SOURCE_SUMMARY`
-- **`OUTREACH_LOGS`**: Global history of all messages sent.
-  - `LOG_ID` (PK), `TARGET_USERNAME`, `ACTOR_USERNAME`, `MESSAGE_TEXT`, `CREATED_AT`
+### **Logging System**
+*   **`EVENT_LOGS`** (`ELG-A1dC2h4Bw8`): Parent table for all event types.
+*   **`OUTREACH_LOGS`** (`OLG-A1dC2h4Bw8`): Child extension (1:1 with EVENT_LOGS).
 
-### **Governance & Audit (New)**
-- **`TEAM_GOALS`**: Shared suggested limits (e.g., MAX_DAILY_DMS).
-- **`OPERATOR_GOALS`**: Personal overrides for team goals.
-- **`AUDIT_LOGS`**: Detailed history of administrative actions (transfers, goal changes).
+### **Governance & Audit**
+*   **`GOALS`** (`GOL-A1B2C3D4`): Performance targets (Team/Personal).
+*   **`RULES`** (`RUL-X9Y8Z7W6`): Frequency caps and interval spacing limits.
+
+### **Status Enums**
+*   **Target Pipeline (`TAR_STATUS`)**: `Cold No Reply` -> `Replied` -> `Warm` -> `Booked` -> `Paid` -> `Tableturnerr Client` | `Excluded`
+*   **Actor Status (`ACT_STATUS`)**: `Active` | `Suspended By Team` | `Suspended By Insta` | `Discarded`
+*   **Goal Metrics**: `Total Messages Sent`, `Unique Profiles Contacted`, `Replies Received`, `Warm Leads Generated`, `Bookings Made`, `Payments Received`.
 
 ---
 
-## 🗓️ Development Status
-- **Auth & Identity**: Fully implemented with searchable onboarding.
-- **Core Dashboard**: Live stats, real-time activity feed, and performance charts.
-- **Leads Management**: Server-side search, status updates, and notes.
-- **Analytics**: Dynamic time-range tracking (7D/30D/90D) and peak activity heatmaps.
-- **Governance**: Server actions for Actor/Lead transfers and Democratic Goal setting.
-- **Optimization**: Passing production build with full caching and rate limiting.
-
-
 ## ⚡ 4. Next.js 16 Implementation Details
+
+### **Tech Stack**
+- **Framework**: Next.js 16 (App Router) + React 19
+- **Styling**: Tailwind CSS v4 + Shadcn UI
+- **Database**: Oracle ATP (Thin Mode via `oracledb`)
+- **Auth**: Auth.js v5 (Google OAuth)
+- **Caching**: Next.js ISR + React `cache()` + `unstable_cache()`
+
+### **Page Structure & Features**
+- **Dashboard (`/`)**: Real-time KPI cards, Recent Activity Feed, Status Distribution.
+- **Analytics (`/analytics`)**: Outreach Volume Trends, Heatmaps, Operator Leaderboard.
+- **Leads (`/leads`)**: CRM Pipeline with paginated data table and inline status updates.
+- **Actors (`/actors`)**: Performance grid and status management for Insta accounts.
+- **Logs (`/logs`)**: Infinite scroll event history with advanced filters.
+- **Settings (`/settings`)**: Operator profile and "My Data vs Team Data" toggle.
+
+### **Caching Strategy (Dual-Layer)**
+We use a dual-layer pattern: `React cache()` for request deduplication and `unstable_cache()` for ISR.
+
+| Function | TTL | Tags |
+|----------|-----|------|
+| `getCachedStats` | 60s | stats, global |
+| `getCachedDashboardMetrics` | 60s | logs, prospects, metrics |
+| `getCachedRecentLogs` | 30s | logs, recent |
+| `getCachedOutreachVolume` | 1h | logs, analytics |
+| `getCachedActivityHeatmap` | 1h | logs, analytics |
+| `getPagedLeads` | No cache | Realtime |
+| `getPagedLogs` | No cache | Realtime |
 
 ### **Authorization & The Gatekeeper**
 Access is strictly controlled via `app/(dashboard)/layout.tsx`.
 - **Level 1:** `session.user` must exist (Google Login).
 - **Level 2:** `session.user.operator_name` must be set.
-- **Onboarding Page:** A searchable combobox allows users to claim existing identities or create new ones.
-
-### **Data Access Patterns**
-- **Driver:** `oracledb` in Thin Mode (Pure JS).
-- **Pooling:** Max 10 connections to respect Oracle Free Tier OCPU limits.
-- **Caching:**
-    - `getCachedStats`: Revalidates every 60s.
-    - `getCachedRecentLogs`: Revalidates every 30s.
-- **Security:**
-    - **Input:** Mandatory `zod` parsing for all Server Actions.
-    - **Database:** Strict use of bind variables (`:params`) to eliminate SQL injection risk.
-    - **Usage:** Rate limiting per user/IP using `lru-cache`.
 
 ---
 
@@ -96,4 +108,8 @@ Access is strictly controlled via `app/(dashboard)/layout.tsx`.
 - **UI:** Strictly use Shadcn + Tailwind 4. Dark Purple aesthetic is mandatory.
 - **Errors:** All pages must have an `error.tsx` boundary to handle Oracle connection timeouts.
 - **Icons:** Use `lucide-react`.
-- **Database:** Never write raw SQL strings with interpolation. Always use the `dbQuery` helper.
+- **Database:** 
+    - Never write raw SQL strings with interpolation. 
+    - Always use bind variables (`:params`) to eliminate SQL injection risk.
+    - Max 10 connections (Oracle Free Tier OCPU limit).
+

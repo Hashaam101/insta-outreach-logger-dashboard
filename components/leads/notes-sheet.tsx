@@ -11,16 +11,9 @@ import {
   SheetFooter
 } from "@/components/ui/sheet"
 import { Textarea } from "@/components/ui/textarea"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import { Send, Loader2 } from "lucide-react"
-import { addLeadNote, getLeadNotes } from "@/app/(dashboard)/leads/actions"
-
-interface Note {
-    id: number;
-    text: string;
-    operator: string;
-    created_at: string;
-}
+import { Save, Loader2 } from "lucide-react"
+import { updateLeadNote, getLeadNote } from "@/app/(dashboard)/leads/actions"
+import { toast } from "sonner"
 
 interface NotesSheetProps {
   username: string
@@ -29,101 +22,73 @@ interface NotesSheetProps {
 }
 
 export function NotesSheet({ username, open, onOpenChange }: NotesSheetProps) {
-  const [notes, setNotes] = useState<Note[]>([]);
-  const [newNote, setNewNote] = useState("");
+  const [note, setNote] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Fetch notes when sheet opens
+  // Fetch note when sheet opens
   useEffect(() => {
       let isMounted = true;
       if (open) {
-          // Use a slight delay or requestAnimationFrame to move it out of the synchronous render path
-          const fetchNotes = async () => {
+          const fetchNote = async () => {
               setIsLoading(true);
               try {
-                  const data = await getLeadNotes(username);
-                  if (isMounted) setNotes(data as Note[]);
+                  const data = await getLeadNote(username);
+                  if (isMounted) setNote(data === "N/A" ? "" : data);
+              } catch {
+                  toast.error("Failed to load notes");
               } finally {
                   if (isMounted) setIsLoading(false);
               }
           };
-          fetchNotes();
+          fetchNote();
       }
       return () => { isMounted = false; };
   }, [open, username]);
 
-  const handleAddNote = async () => {
-      if (!newNote.trim()) return;
-
+  const handleSaveNote = async () => {
       setIsSubmitting(true);
-      const tempId = Date.now();
       
-      // Optimistic update
-      const optimisticNote: Note = {
-          id: tempId,
-          text: newNote,
-          operator: "Me", 
-          created_at: new Date().toISOString()
-      };
-      setNotes([optimisticNote, ...notes]);
-      setNewNote("");
-
-      const result = await addLeadNote(username, optimisticNote.text);
+      const result = await updateLeadNote(username, note);
       
-      if (!result.success) {
-          // Revert if failed
-          setNotes(prev => prev.filter(n => n.id !== tempId));
-          alert("Failed to save note");
+      if (result.success) {
+          toast.success("Notes updated successfully");
+          if (onOpenChange) onOpenChange(false);
+      } else {
+          toast.error("Failed to save note");
       }
       setIsSubmitting(false);
   }
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="flex flex-col gap-4">
+      <SheetContent className="flex flex-col gap-4 sm:max-w-md">
         <SheetHeader>
-          <SheetTitle>Notes for @{username}</SheetTitle>
+          <SheetTitle>Notes for {username}</SheetTitle>
           <SheetDescription>
-            View and add internal notes for this prospect.
+            Edit internal notes for this prospect.
           </SheetDescription>
         </SheetHeader>
         
-        <div className="flex-1 flex flex-col gap-4 overflow-hidden">
-            <ScrollArea className="flex-1 pr-4">
-                {isLoading ? (
-                    <div className="flex justify-center py-10">
-                        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                    </div>
-                ) : (
-                    <div className="flex flex-col gap-3">
-                        {notes.map(note => (
-                            <div key={note.id} className="bg-muted p-3 rounded-lg text-sm">
-                                <p>{note.text}</p>
-                                <div className="mt-2 flex justify-between text-xs text-muted-foreground">
-                                    <span>{note.operator}</span>
-                                    <span>{new Date(note.created_at).toLocaleString()}</span>
-                                </div>
-                            </div>
-                        ))}
-                        {notes.length === 0 && !isLoading && (
-                            <p className="text-center text-muted-foreground text-sm py-4">No notes yet.</p>
-                        )}
-                    </div>
-                )}
-            </ScrollArea>
+        <div className="flex-1 flex flex-col gap-4 overflow-hidden py-4">
+            {isLoading ? (
+                <div className="flex justify-center py-10">
+                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+            ) : (
+                <Textarea 
+                    placeholder="Add details about this prospect..." 
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                    className="flex-1 resize-none text-sm leading-relaxed p-4"
+                />
+            )}
         </div>
 
-        <SheetFooter className="mt-auto flex flex-col sm:flex-col gap-2">
-            <Textarea 
-                placeholder="Type your note here..." 
-                value={newNote}
-                onChange={(e) => setNewNote(e.target.value)}
-                className="resize-none"
-            />
-            <Button onClick={handleAddNote} disabled={isSubmitting || !newNote.trim()} className="w-full gap-2">
-                {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                Add Note
+        <SheetFooter className="mt-auto">
+            <Button onClick={handleSaveNote} disabled={isSubmitting || isLoading} className="w-full gap-2">
+                {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                Save Changes
             </Button>
         </SheetFooter>
       </SheetContent>

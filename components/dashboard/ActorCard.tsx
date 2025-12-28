@@ -12,6 +12,7 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { IdTag } from "@/components/ui/id-tag"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -39,13 +40,16 @@ import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 
 interface Actor {
-    USERNAME: string;
-    OWNER_OPERATOR: string;
-    STATUS: string;
+    ACT_ID: string;
+    ACT_USERNAME: string;
+    OPR_ID: string;
+    OPR_NAME: string;
+    ACT_STATUS: string;
 }
 
 interface Operator {
-    OPERATOR_NAME: string;
+    OPR_ID: string;
+    OPR_NAME: string;
 }
 
 interface ActorCardProps {
@@ -65,10 +69,10 @@ export function ActorCard({ actor, operators }: ActorCardProps) {
     }
     
     setIsPending(true)
-    const res = await transferActor(actor.USERNAME, selectedOperator)
+    const res = await transferActor(actor.ACT_USERNAME, selectedOperator)
     if (res.success) {
       toast.success("Ownership Transferred", {
-        description: `@${actor.USERNAME} successfully moved to ${selectedOperator}.`
+        description: `${actor.ACT_USERNAME} successfully moved to ${selectedOperator}.`
       })
       setIsTransferOpen(false)
     } else {
@@ -85,13 +89,16 @@ export function ActorCard({ actor, operators }: ActorCardProps) {
                 <Instagram className="h-5 w-5 text-primary" />
             </div>
             <div>
-                <h3 className="font-bold text-base tracking-tight">@{actor.USERNAME}</h3>
-                <Badge variant="outline" className={cn(
-                    "text-[8px] h-4 uppercase font-bold px-1.5",
-                    actor.STATUS === 'ACTIVE' ? "bg-green-500/10 text-green-500 border-green-500/20" : "bg-red-500/10 text-red-500 border-red-500/20"
-                )}>
-                    {actor.STATUS}
-                </Badge>
+                <h3 className="font-bold text-base tracking-tight">{actor.ACT_USERNAME}</h3>
+                <div className="flex items-center gap-2 mt-1">
+                    <Badge variant="outline" className={cn(
+                        "text-[8px] h-4 uppercase font-bold px-1.5",
+                        actor.ACT_STATUS === 'Active' ? "bg-green-500/10 text-green-500 border-green-500/20" : "bg-red-500/10 text-red-500 border-red-500/20"
+                    )}>
+                        {actor.ACT_STATUS}
+                    </Badge>
+                    <IdTag id={actor.ACT_ID} />
+                </div>
             </div>
         </div>
 
@@ -117,13 +124,16 @@ export function ActorCard({ actor, operators }: ActorCardProps) {
       </div>
 
       <div className="flex items-center justify-between mt-auto pt-4 border-t border-primary/5">
-        <div className="flex items-center gap-2">
-            <div className="h-6 w-6 rounded-full bg-primary/20 flex items-center justify-center">
+        <div className="flex items-center gap-2 w-full">
+            <div className="h-6 w-6 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
                 <User className="h-3 w-3 text-primary" />
             </div>
-            <div className="flex flex-col">
-                <span className="text-[9px] uppercase font-bold text-muted-foreground leading-none">Current Owner</span>
-                <span className="text-xs font-semibold text-foreground/80">{actor.OWNER_OPERATOR}</span>
+            <div className="flex flex-col min-w-0 w-full">
+                <span className="text-[9px] uppercase font-bold text-muted-foreground leading-none mb-0.5">Current Owner</span>
+                <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-foreground/80 truncate">{actor.OPR_NAME}</span>
+                    <IdTag id={actor.OPR_ID} />
+                </div>
             </div>
         </div>
       </div>
@@ -136,7 +146,7 @@ export function ActorCard({ actor, operators }: ActorCardProps) {
                 <DialogTitle>Transfer Ownership</DialogTitle>
             </div>
             <DialogDescription className="text-xs">
-              This will reassign **@{actor.USERNAME}** to a different team member. This action is logged for security.
+              This will reassign **{actor.ACT_USERNAME}** to a different team member. This action is logged for security.
             </DialogDescription>
           </DialogHeader>
           
@@ -150,11 +160,11 @@ export function ActorCard({ actor, operators }: ActorCardProps) {
                     <SelectContent>
                         {operators.map((op) => (
                             <SelectItem 
-                                key={op.OPERATOR_NAME} 
-                                value={op.OPERATOR_NAME}
-                                disabled={op.OPERATOR_NAME === actor.OWNER_OPERATOR}
+                                key={op.OPR_NAME} 
+                                value={op.OPR_NAME}
+                                disabled={op.OPR_NAME === actor.OPR_NAME}
                             >
-                                {op.OPERATOR_NAME} {op.OPERATOR_NAME === actor.OWNER_OPERATOR ? "(Current)" : ""}
+                                {op.OPR_NAME} {op.OPR_NAME === actor.OPR_NAME ? "(Current)" : ""}
                             </SelectItem>
                         ))}
                     </SelectContent>

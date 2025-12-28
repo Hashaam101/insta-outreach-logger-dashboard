@@ -49,7 +49,7 @@ export function TransferLeadDialog({ targetUsername, open, onOpenChange }: Trans
     const res = await transferLead(targetUsername, newActor)
     if (res.success) {
       toast.success("Lead Transferred", {
-        description: `@${targetUsername} moved to actor @${newActor}`
+        description: `${targetUsername} moved to actor ${newActor}`
       })
       onOpenChange?.(false)
     } else {
@@ -62,7 +62,7 @@ export function TransferLeadDialog({ targetUsername, open, onOpenChange }: Trans
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle>Transfer @{targetUsername}</DialogTitle>
+          <DialogTitle>Transfer {targetUsername}</DialogTitle>
           <DialogDescription>
             Move this prospect to a different Instagram actor account.
           </DialogDescription>
@@ -85,7 +85,7 @@ export function TransferLeadDialog({ targetUsername, open, onOpenChange }: Trans
                     <div className="bg-primary/10 p-1.5 rounded-md">
                         <Instagram className="h-3.5 w-3.5 text-primary" />
                     </div>
-                    <span className="font-medium">@{actor.USERNAME}</span>
+                    <span className="font-medium">{actor.USERNAME}</span>
                   </CommandItem>
                 ))}
               </CommandGroup>
