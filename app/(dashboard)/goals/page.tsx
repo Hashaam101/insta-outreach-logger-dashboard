@@ -1,4 +1,5 @@
 import { getGoalsDashboardData, getRulesDashboardData } from "@/app/actions/governance";
+import { getCachedOperators, getCachedActors } from "@/lib/data";
 import { GoalsDashboard } from "@/components/governance/goals-dashboard";
 import { RulesDashboard } from "@/components/governance/rules-dashboard";
 import { Target, ShieldCheck, Trophy, Info } from "lucide-react";
