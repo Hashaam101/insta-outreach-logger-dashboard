@@ -68,7 +68,7 @@ export default async function DashboardPage({
                 Management Console
             </div>
             <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight">
-                Command Center
+                Dashboard
             </h1>
             <p className="text-muted-foreground text-sm max-w-md">
                 {view === "my" 

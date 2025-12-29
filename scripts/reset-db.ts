@@ -32,7 +32,7 @@ async function run() {
     // Fetch all tables in the current schema
     const result = await connection.execute<{ TABLE_NAME: string }>(
       `SELECT table_name FROM user_tables`,
-      [],
+      [] as any,
       { outFormat: oracledb.OUT_FORMAT_OBJECT }
     );
     

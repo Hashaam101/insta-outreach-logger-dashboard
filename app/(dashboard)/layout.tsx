@@ -2,9 +2,10 @@ import { Sidebar } from "@/components/sidebar";
 import { SidebarProvider } from "@/components/sidebar-context";
 import { auth } from "@/auth";
 import { redirect } from "next/navigation";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetTrigger, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import Image from "next/image";
 
 export default async function DashboardLayout({
   children,
@@ -34,8 +35,13 @@ export default async function DashboardLayout({
           {/* Mobile Header */}
           <header className="lg:hidden flex h-16 items-center justify-between px-4 border-b bg-card/50 backdrop-blur-xl shrink-0">
             <div className="flex items-center gap-2">
-              <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center border border-primary/20">
-                  <span className="text-primary font-bold text-xs">CRM</span>
+              <div className="relative h-8 w-8 overflow-hidden rounded-lg border border-primary/20 shadow-lg">
+                <Image 
+                  src="/logo.png" 
+                  alt="InstaCRM Logo" 
+                  fill
+                  className="object-cover"
+                />
               </div>
               <span className="font-bold tracking-tight">InstaCRM</span>
             </div>
@@ -47,7 +53,11 @@ export default async function DashboardLayout({
                 </Button>
               </SheetTrigger>
               <SheetContent side="left" className="p-0 w-64 bg-card/95 backdrop-blur-2xl border-r border-primary/10">
-                <Sidebar session={session} showToggle={false} />
+                <SheetTitle className="sr-only">Navigation Menu</SheetTitle>
+                <SheetDescription className="sr-only">
+                  Access the dashboard navigation links.
+                </SheetDescription>
+                <Sidebar session={session} />
               </SheetContent>
             </Sheet>
           </header>

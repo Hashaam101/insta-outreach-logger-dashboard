@@ -68,8 +68,8 @@ export function LogsToolbar({ operators, actors }: LogsToolbarProps) {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center space-x-2">
-        <div className="relative flex-1 md:max-w-sm">
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative w-full md:flex-1 md:max-w-sm">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground/50" />
             <Input
               placeholder="Search logs..."
@@ -82,46 +82,48 @@ export function LogsToolbar({ operators, actors }: LogsToolbarProps) {
             />
         </div>
         
-        <FacetedFilter
-            title="Time Range"
-            options={TIME_RANGE_OPTIONS}
-            selectedValues={selectedRange}
-            onSelect={(vals) => handleFilterChange("timeRange", vals)}
-        />
+        <div className="flex flex-wrap items-center gap-2">
+            <FacetedFilter
+                title="Time Range"
+                options={TIME_RANGE_OPTIONS}
+                selectedValues={selectedRange}
+                onSelect={(vals) => handleFilterChange("timeRange", vals)}
+            />
 
-        <FacetedFilter
-            title="Event Type"
-            options={EVENT_TYPES}
-            selectedValues={selectedTypes}
-            onSelect={(vals) => handleFilterChange("types", vals)}
-        />
+            <FacetedFilter
+                title="Event Type"
+                options={EVENT_TYPES}
+                selectedValues={selectedTypes}
+                onSelect={(vals) => handleFilterChange("types", vals)}
+            />
 
-        <div className="h-6 w-px bg-border mx-2 hidden md:block" />
+            <div className="h-6 w-px bg-border mx-1 hidden md:block" />
 
-        <FacetedFilter
-            title="Operators"
-            options={operators}
-            selectedValues={selectedOperators}
-            onSelect={(vals) => handleFilterChange("operators", vals)}
-        />
+            <FacetedFilter
+                title="Operators"
+                options={operators}
+                selectedValues={selectedOperators}
+                onSelect={(vals) => handleFilterChange("operators", vals)}
+            />
 
-        <FacetedFilter
-            title="Actors"
-            options={actors}
-            selectedValues={selectedActors}
-            onSelect={(vals) => handleFilterChange("actors", vals)}
-        />
+            <FacetedFilter
+                title="Actors"
+                options={actors}
+                selectedValues={selectedActors}
+                onSelect={(vals) => handleFilterChange("actors", vals)}
+            />
 
-        {isFiltered && (
-          <Button
-            variant="ghost"
-            onClick={resetFilters}
-            className="h-8 px-2 lg:px-3 text-muted-foreground hover:text-foreground"
-          >
-            Reset
-            <X className="ml-2 h-4 w-4" />
-          </Button>
-        )}
+            {isFiltered && (
+              <Button
+                variant="ghost"
+                onClick={resetFilters}
+                className="h-8 px-2 text-muted-foreground hover:text-foreground"
+              >
+                Reset
+                <X className="ml-2 h-4 w-4" />
+              </Button>
+            )}
+        </div>
       </div>
     </div>
   )

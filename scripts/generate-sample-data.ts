@@ -76,7 +76,7 @@ async function run() {
 
         // Ensure at least 6 operators
         const existingOps = await conn.execute<{ OPR_ID: string, OPR_NAME: string }>
-            (`SELECT OPR_ID, OPR_NAME FROM OPERATORS`, [], { outFormat: oracledb.OUT_FORMAT_OBJECT }
+            (`SELECT OPR_ID, OPR_NAME FROM OPERATORS`, [] as any, { outFormat: oracledb.OUT_FORMAT_OBJECT }
         );
         const ops = existingOps.rows || [];
         

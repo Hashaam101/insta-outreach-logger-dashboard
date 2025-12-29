@@ -19,6 +19,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -27,8 +28,8 @@ interface DataTableProps<TData, TValue> {
   data: TData[]
   pageSize?: number
   enableServerPagination?: boolean
-  pageCount?: number // Total pages from server
-  currentPage?: number // 1-based index from server
+  pageCount?: number
+  currentPage?: number
 }
 
 export function DataTable<TData, TValue>({
@@ -43,101 +44,91 @@ export function DataTable<TData, TValue>({
   const pathname = usePathname()
   const searchParams = useSearchParams()
 
-  // Manage pagination state
-  const [pagination, setPagination] = React.useState({
-    pageIndex: enableServerPagination ? serverPage - 1 : 0,
-    pageSize,
-  })
-
-  // Sync with server props if enabled
-  React.useEffect(() => {
-    if (enableServerPagination) {
-      setPagination(prev => ({ ...prev, pageIndex: serverPage - 1 }))
-    }
-  }, [enableServerPagination, serverPage])
-
   const table = useReactTable({
     data,
     columns,
     getCoreRowModel: getCoreRowModel(),
-    getPaginationRowModel: enableServerPagination ? undefined : getPaginationRowModel(),
-    manualPagination: enableServerPagination,
-    pageCount: enableServerPagination ? serverPageCount : undefined,
+    getPaginationRowModel: getPaginationRowModel(),
     state: {
-      pagination,
+      pagination: {
+        pageIndex: (serverPage || 1) - 1,
+        pageSize: pageSize,
+      },
     },
-    onPaginationChange: setPagination,
+    manualPagination: enableServerPagination,
+    pageCount: serverPageCount,
   })
 
-  // Helper for server-side navigation
-  const navigateToPage = (pageIndex: number) => {
-    const params = new URLSearchParams(searchParams?.toString())
-    params.set('page', (pageIndex + 1).toString())
+  const navigateToPage = (index: number) => {
+    const params = new URLSearchParams(searchParams.toString())
+    params.set("page", (index + 1).toString())
     router.push(`${pathname}?${params.toString()}`)
   }
 
-  // Use either table's calculated page count (client) or prop (server)
   const finalPageCount = enableServerPagination ? serverPageCount : table.getPageCount()
-  const currentPageIndex = table.getState().pagination.pageIndex
+  const currentPageIndex = enableServerPagination ? (serverPage - 1) : table.getState().pagination.pageIndex
   const displayPage = currentPageIndex + 1
 
   return (
     <div className="w-full">
-      <div className="border-0">
-        <Table>
-          <TableHeader>
-            {table.getHeaderGroups().map((headerGroup) => (
-              <TableRow key={headerGroup.id} className="border-b border-primary/5 hover:bg-transparent">
-                {headerGroup.headers.map((header) => {
-                  return (
-                    <TableHead key={header.id} className="h-11 px-4">
-                      {header.isPlaceholder
-                        ? null
-                        : flexRender(
-                            header.column.columnDef.header,
-                            header.getContext()
-                          )}
-                    </TableHead>
-                  )
-                })}
-              </TableRow>
-            ))}
-          </TableHeader>
-          <TableBody>
-            {table.getRowModel().rows?.length ? (
-              table.getRowModel().rows.map((row) => (
-                <TableRow
-                  key={row.id}
-                  data-state={row.getIsSelected() && "selected"}
-                >
-                  {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id} className="px-4 py-3">
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </TableCell>
-                  ))}
+      <ScrollArea className="w-full">
+        <div className="min-w-[800px]">
+          <Table>
+            <TableHeader>
+              {table.getHeaderGroups().map((headerGroup) => (
+                <TableRow key={headerGroup.id} className="border-b border-primary/5 hover:bg-transparent">
+                  {headerGroup.headers.map((header) => {
+                    return (
+                      <TableHead key={header.id} className="h-11 px-4">
+                        {header.isPlaceholder
+                          ? null
+                          : flexRender(
+                              header.column.columnDef.header,
+                              header.getContext()
+                            )}
+                      </TableHead>
+                    )
+                  })}
                 </TableRow>
-              ))
-            ) : (
-              <TableRow>
-                <TableCell colSpan={columns.length} className="h-32 text-center">
-                  <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                    <span className="text-sm">No results found</span>
-                    <span className="text-xs opacity-60">Try adjusting your search or filters</span>
-                  </div>
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </div>
+              ))}
+            </TableHeader>
+            <TableBody>
+              {table.getRowModel().rows?.length ? (
+                table.getRowModel().rows.map((row) => (
+                  <TableRow
+                    key={row.id}
+                    data-state={row.getIsSelected() && "selected"}
+                  >
+                    {row.getVisibleCells().map((cell) => (
+                      <TableCell key={cell.id} className="px-4 py-3">
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell colSpan={columns.length} className="h-32 text-center">
+                    <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                      <span className="text-sm">No results found</span>
+                      <span className="text-xs opacity-60">Try adjusting your search or filters</span>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
+        <ScrollBar orientation="horizontal" />
+      </ScrollArea>
 
       {/* Pagination */}
       {finalPageCount > 1 && (
-        <div className="flex items-center justify-between px-4 py-3 border-t border-primary/5">
-          <div className="text-xs text-muted-foreground">
+        <div className="flex flex-col sm:flex-row items-center justify-between px-4 py-3 border-t border-primary/5 gap-4">
+          <div className="text-xs text-muted-foreground order-2 sm:order-1">
             Page {displayPage} of {finalPageCount} ({enableServerPagination ? 'server-side' : data.length + ' total'})
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 order-1 sm:order-2">
             <Button
               variant="ghost"
               size="icon"

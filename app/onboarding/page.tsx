@@ -48,9 +48,7 @@ export default async function OnboardingPage() {
             <div className="space-y-1">
                 <h1 className="text-4xl font-semibold">Establish Identity</h1>
                 <p className="text-muted-foreground font-medium">
-                    {myOperator 
-                        ? `Welcome back, ${myOperator.OPR_NAME}` 
-                        : "Link your Google account to an outreach persona."}
+                    Link your Google account to an outreach persona.
                 </p>
             </div>
         </div>
@@ -77,7 +75,6 @@ export default async function OnboardingPage() {
                 unavailableNames={unavailableNames}
                 googleName={session.user.name || ""} 
                 googleEmail={session.user.email}
-                currentOperatorName={myOperator?.OPR_NAME}
             />
           </CardContent>
         </Card>

@@ -26,7 +26,7 @@ export async function StatsGrid({ operatorName }: StatsGridProps) {
   ];
 
   return (
-    <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
+    <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
       {items.map((item) => (
         <Card key={item.label} className="border-border/50 bg-card/80 backdrop-blur-sm overflow-hidden group hover:border-border transition-colors">
           <CardContent className="p-5">

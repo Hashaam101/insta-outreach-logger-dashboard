@@ -15,7 +15,8 @@ interface PageProps {
     statuses?: string;
     operators?: string;
     actors?: string;
-    page?: string 
+    page?: string;
+    timeRange?: string;
   }>;
 }
 
@@ -38,7 +39,7 @@ export default async function LeadsPage({ searchParams }: PageProps) {
   // BUT: "operators" filter overrides default "my leads" view.
   // If no operator filter is set, should we show ALL or just MINE?
   // Current behavior was "MINE".
-  // New behavior: "Command Center" implies broader view, but usually defaults to "My View".
+  // New behavior: "Dashboard" implies broader view, but usually defaults to "My View".
   // However, the filter component allows selecting operators.
   // Strategy: 
   // 1. If 'operators' filter is present, use it.

@@ -11,6 +11,8 @@ interface PageProps {
       operators?: string;
       actors?: string;
       page?: string;
+      types?: string;
+      timeRange?: string;
   }>;
 }
 

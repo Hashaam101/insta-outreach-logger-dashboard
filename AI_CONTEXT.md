@@ -1,6 +1,6 @@
 # 🤖 AI Technical Context: InstaCRM Ecosystem
 
-This document provides a deep-dive into the architecture, data flow, and design patterns of the **Insta Outreach Logger (Remastered)** and its **Command Center (Dashboard)**.
+This document provides a deep-dive into the architecture, data flow, and design patterns of the **Insta Outreach Logger (Remastered)** and its **Dashboard (Dashboard)**.
 
 ---
 
@@ -16,7 +16,7 @@ Instagram employs sophisticated anti-bot detection. InstaCRM solves this by usin
 | :--- | :--- | :--- |
 | **Desktop Agent** | Python/Chrome | Handles stealthy DM logging via Chrome Native Messaging. |
 | **Oracle ATP** | Cloud Core | Central source of truth (GMT+0 UTC). Handles ID generation. |
-| **Web Dashboard** | Next.js 16 | The "Command Center" for Analytics, CRM, and Governance. |
+| **Web Dashboard** | Next.js 16 | The "Dashboard" for Analytics, CRM, and Governance. |
 
 ### Data Flow: The "Stealth Bridge"
 1. **Capture:** Browser Extension detects a sent DM.

@@ -1,7 +1,7 @@
 'use server';
 
 import { auth } from "@/auth";
-import { dbQuery, clearCache } from "@/lib/db";
+import { dbQuery, dbQuerySingle, clearCache } from "@/lib/db";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { rateLimit } from "@/lib/ratelimit";
 import { z } from "zod";

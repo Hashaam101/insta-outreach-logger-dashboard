@@ -43,6 +43,8 @@ const formSchema = z.object({
   assignedToAct: z.string().optional(),
 })
 
+type FormValues = z.infer<typeof formSchema>
+
 const METRIC_OPTIONS = [
     "Total Messages Sent",
     "Unique Profiles Contacted",
@@ -61,8 +63,8 @@ export function ProposeGoalDialog({ operators, actors }: ProposeGoalDialogProps)
   const [open, setOpen] = React.useState(false)
   const [isPending, setIsPending] = React.useState(false)
 
-  const form = useForm<z.infer<typeof formSchema>>({
-    resolver: zodResolver(formSchema),
+  const form = useForm<FormValues>({
+    resolver: zodResolver(formSchema) as any,
     defaultValues: {
       metric: "Total Messages Sent",
       value: 100,
@@ -75,7 +77,7 @@ export function ProposeGoalDialog({ operators, actors }: ProposeGoalDialogProps)
 
   const watchScope = form.watch("scope")
 
-  async function onSubmit(values: z.infer<typeof formSchema>) {
+  async function onSubmit(values: FormValues) {
     setIsPending(true)
     const res = await proposeGoal({
         metric: values.metric as GoalMetric,
@@ -112,11 +114,11 @@ export function ProposeGoalDialog({ operators, actors }: ProposeGoalDialogProps)
           </DialogDescription>
         </DialogHeader>
 
-        <Form {...form}>
+        <Form {...(form as any)}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-2">
             <div className="grid grid-cols-2 gap-4">
                 <FormField
-                control={form.control}
+                control={form.control as any}
                 name="metric"
                 render={({ field }) => (
                     <FormItem>
@@ -138,7 +140,7 @@ export function ProposeGoalDialog({ operators, actors }: ProposeGoalDialogProps)
                 />
 
                 <FormField
-                control={form.control}
+                control={form.control as any}
                 name="scope"
                 render={({ field }) => (
                     <FormItem>
@@ -162,7 +164,7 @@ export function ProposeGoalDialog({ operators, actors }: ProposeGoalDialogProps)
 
             {watchScope === 'Operator' && (
                 <FormField
-                control={form.control}
+                control={form.control as any}
                 name="assignedToOpr"
                 render={({ field }) => (
                     <FormItem className="animate-in fade-in slide-in-from-top-2">
@@ -186,7 +188,7 @@ export function ProposeGoalDialog({ operators, actors }: ProposeGoalDialogProps)
 
             {watchScope === 'Actor' && (
                 <FormField
-                control={form.control}
+                control={form.control as any}
                 name="assignedToAct"
                 render={({ field }) => (
                     <FormItem className="animate-in fade-in slide-in-from-top-2">
@@ -210,7 +212,7 @@ export function ProposeGoalDialog({ operators, actors }: ProposeGoalDialogProps)
 
             <div className="grid grid-cols-2 gap-4">
                 <FormField
-                control={form.control}
+                control={form.control as any}
                 name="value"
                 render={({ field }) => (
                     <FormItem>
@@ -223,7 +225,7 @@ export function ProposeGoalDialog({ operators, actors }: ProposeGoalDialogProps)
                 />
 
                 <FormField
-                control={form.control}
+                control={form.control as any}
                 name="frequency"
                 render={({ field }) => (
                     <FormItem>

@@ -14,7 +14,6 @@ oracledb.outFormat = oracledb.OUT_FORMAT_OBJECT;
 oracledb.autoCommit = true;
 oracledb.fetchAsString = [oracledb.CLOB]; // Only fetch CLOB as string, handle others manually
 oracledb.stmtCacheSize = 0;
-oracledb.fetchArraySize = 50;
 
 const getConnectionConfig = () => ({
   user: env.ORACLE_USER,
@@ -31,7 +30,7 @@ const CACHE_TTL = 5 * 60 * 1000;
  */
 export async function dbQuery<T = Record<string, unknown>>(
   sql: string,
-  params: Record<string, unknown> = {},
+  params: any = {},
   options: { maxRetries?: number; useCache?: boolean; cacheKey?: string } = {}
 ): Promise<T[]> {
   const { maxRetries = 5, useCache = false, cacheKey } = options;
@@ -132,7 +131,7 @@ function sanitizeRow(row: Record<string, unknown>): Record<string, unknown> {
  */
 export async function dbQuerySingle<T = Record<string, unknown>>(
   sql: string,
-  params: Record<string, unknown> = {}
+  params: any = {}
 ): Promise<T | null> {
   const rows = await dbQuery<T>(sql, params, { maxRetries: 5 });
   return rows[0] || null;
@@ -143,7 +142,7 @@ export async function dbQuerySingle<T = Record<string, unknown>>(
  */
 export async function dbCount(
   sql: string,
-  params: Record<string, unknown> = {}
+  params: any = {}
 ): Promise<number> {
   const result = await dbQuerySingle<{ CNT: string | number }>(sql, params);
   const val = result?.CNT;

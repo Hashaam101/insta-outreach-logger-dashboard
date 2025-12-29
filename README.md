@@ -1,4 +1,4 @@
-# InstaCRM Command Center
+# InstaCRM Dashboard
 
 **The distributed intelligence hub for stealthy, high-volume Instagram outreach operations.**
 

@@ -18,7 +18,7 @@ import { TimeProvider, TimeFormat } from "@/components/time-context";
 import { cookies } from "next/headers";
 
 export const metadata: Metadata = {
-  title: "InstaCRM Command Center",
+  title: "InstaCRM Dashboard",
   description: "Distributed Instagram Outreach Logger & CRM Dashboard",
   icons: {
     icon: "/logo.ico",

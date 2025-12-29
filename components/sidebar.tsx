@@ -48,7 +48,7 @@ export function Sidebar({ session }: SidebarProps) {
             {!isCollapsed && (
               <div className="flex flex-col">
                 <span className="font-semibold text-lg tracking-tight leading-none">InstaCRM</span>
-                <span className="text-[8px] font-bold text-primary uppercase tracking-[0.2em]">Command Center</span>
+                <span className="text-[8px] font-bold text-primary uppercase tracking-[0.2em]">Dashboard</span>
               </div>
             )}
           </Link>

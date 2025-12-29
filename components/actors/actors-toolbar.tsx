@@ -121,8 +121,8 @@ export function ActorsToolbar({ operators, handles, initialPrefs }: ActorsToolba
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center space-x-2">
-        <div className="relative flex-1 md:max-w-sm">
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative w-full md:flex-1 md:max-w-sm">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground/50" />
             <Input
               placeholder="Search..."
@@ -135,125 +135,129 @@ export function ActorsToolbar({ operators, handles, initialPrefs }: ActorsToolba
             />
         </div>
         
-        <FacetedFilter
-            title="Status"
-            options={STATUS_OPTIONS}
-            selectedValues={selectedStatuses}
-            onSelect={(vals) => handleFilterChange("statuses", vals)}
-        />
-        
-        <div className="h-6 w-px bg-border mx-2 hidden md:block" />
+        <div className="flex flex-wrap items-center gap-2">
+            <FacetedFilter
+                title="Status"
+                options={STATUS_OPTIONS}
+                selectedValues={selectedStatuses}
+                onSelect={(vals) => handleFilterChange("statuses", vals)}
+            />
+            
+            <div className="h-6 w-px bg-border mx-1 hidden md:block" />
 
-        <FacetedFilter
-            title="Operators"
-            options={operators}
-            selectedValues={selectedOperators}
-            onSelect={(vals) => handleFilterChange("operators", vals)}
-        />
+            <FacetedFilter
+                title="Operators"
+                options={operators}
+                selectedValues={selectedOperators}
+                onSelect={(vals) => handleFilterChange("operators", vals)}
+            />
 
-        <FacetedFilter
-            title="Handles"
-            options={handles}
-            selectedValues={selectedHandles}
-            onSelect={(vals) => handleFilterChange("handles", vals)}
-        />
+            <FacetedFilter
+                title="Handles"
+                options={handles}
+                selectedValues={selectedHandles}
+                onSelect={(vals) => handleFilterChange("handles", vals)}
+            />
 
-        {isFiltered && (
-          <Button
-            variant="ghost"
-            onClick={resetFilters}
-            className="h-8 px-2 lg:px-3 text-muted-foreground hover:text-foreground"
-          >
-            Reset
-            <X className="ml-2 h-4 w-4" />
-          </Button>
-        )}
+            {isFiltered && (
+              <Button
+                variant="ghost"
+                onClick={resetFilters}
+                className="h-8 px-2 text-muted-foreground hover:text-foreground"
+              >
+                Reset
+                <X className="ml-2 h-4 w-4" />
+              </Button>
+            )}
+        </div>
 
-        <div className="flex-1" />
+        <div className="flex-1 hidden md:block" />
 
-        <Popover>
-            <PopoverTrigger asChild>
-                <Button variant="outline" size="sm" className="h-9 rounded-xl border-primary/10 gap-2">
-                    <Settings2 className="h-4 w-4 text-primary" />
-                    <span className="hidden sm:inline">Display Settings</span>
-                </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-[400px] p-4 rounded-2xl bg-card/95 backdrop-blur-xl border-primary/10 shadow-2xl" align="end">
-                <div className="space-y-4">
-                    <div className="space-y-1">
-                        <h4 className="font-bold text-sm">Preview Configuration</h4>
-                        <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold">Set your card metrics</p>
-                    </div>
-                    
-                    <div className="grid gap-6">
-                        <div className="space-y-3">
-                            <label className="text-[10px] font-extrabold text-primary uppercase ml-1 tracking-widest">Box 1 (Account Total)</label>
-                            <div className="grid grid-cols-2 gap-3">
-                                <div className="space-y-1.5">
-                                    <label className="text-[9px] font-bold text-muted-foreground uppercase ml-1">Metric</label>
-                                    <Select value={prefs.metric1} onValueChange={(v) => setPrefs(prev => ({...prev, metric1: v}))}>
-                                        <SelectTrigger className="h-9 rounded-xl bg-background border-primary/5 text-xs w-full">
-                                            <SelectValue className="truncate" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {METRIC_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                <div className="space-y-1.5">
-                                    <label className="text-[9px] font-bold text-muted-foreground uppercase ml-1">Window</label>
-                                    <Select value={prefs.range1} onValueChange={(v) => setPrefs(prev => ({...prev, range1: v}))}>
-                                        <SelectTrigger className="h-9 rounded-xl bg-background border-primary/5 text-xs w-full">
-                                            <SelectValue className="truncate" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {RANGE_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="space-y-3">
-                            <label className="text-[10px] font-extrabold text-primary uppercase ml-1 tracking-widest">Box 2 (Top Item)</label>
-                            <div className="grid grid-cols-2 gap-3">
-                                <div className="space-y-1.5">
-                                    <label className="text-[9px] font-bold text-muted-foreground uppercase ml-1">Metric</label>
-                                    <Select value={prefs.metric2} onValueChange={(v) => setPrefs(prev => ({...prev, metric2: v}))}>
-                                        <SelectTrigger className="h-9 rounded-xl bg-background border-primary/5 text-xs w-full">
-                                            <SelectValue className="truncate" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {METRIC_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                <div className="space-y-1.5">
-                                    <label className="text-[9px] font-bold text-muted-foreground uppercase ml-1">Window</label>
-                                    <Select value={prefs.range2} onValueChange={(v) => setPrefs(prev => ({...prev, range2: v}))}>
-                                        <SelectTrigger className="h-9 rounded-xl bg-background border-primary/5 text-xs w-full">
-                                            <SelectValue className="truncate" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {RANGE_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <Button 
-                        onClick={savePrefs} 
-                        disabled={isPending}
-                        className="w-full h-10 rounded-xl font-bold shadow-lg shadow-primary/20 gap-2 mt-2"
-                    >
-                        {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-                        {isPending ? "Saving..." : "Save Preferences"}
+        <div className="w-full md:w-auto flex justify-end">
+            <Popover>
+                <PopoverTrigger asChild>
+                    <Button variant="outline" size="sm" className="h-9 rounded-xl border-primary/10 gap-2 w-full md:w-auto">
+                        <Settings2 className="h-4 w-4 text-primary" />
+                        <span>Display Settings</span>
                     </Button>
-                </div>
-            </PopoverContent>
-        </Popover>
+                </PopoverTrigger>
+                <PopoverContent className="w-[calc(100vw-2rem)] md:w-[400px] p-4 rounded-2xl bg-card/95 backdrop-blur-xl border-primary/10 shadow-2xl" align="end">
+                    <div className="space-y-4">
+                        <div className="space-y-1">
+                            <h4 className="font-bold text-sm">Preview Configuration</h4>
+                            <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold">Set your card metrics</p>
+                        </div>
+                        
+                        <div className="grid gap-6">
+                            <div className="space-y-3">
+                                <label className="text-[10px] font-extrabold text-primary uppercase ml-1 tracking-widest">Box 1 (Account Total)</label>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="space-y-1.5">
+                                        <label className="text-[9px] font-bold text-muted-foreground uppercase ml-1">Metric</label>
+                                        <Select value={prefs.metric1} onValueChange={(v) => setPrefs(prev => ({...prev, metric1: v}))}>
+                                            <SelectTrigger className="h-9 rounded-xl bg-background border-primary/5 text-xs w-full">
+                                                <SelectValue className="truncate" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {METRIC_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <label className="text-[9px] font-bold text-muted-foreground uppercase ml-1">Window</label>
+                                        <Select value={prefs.range1} onValueChange={(v) => setPrefs(prev => ({...prev, range1: v}))}>
+                                            <SelectTrigger className="h-9 rounded-xl bg-background border-primary/5 text-xs w-full">
+                                                <SelectValue className="truncate" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {RANGE_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="space-y-3">
+                                <label className="text-[10px] font-extrabold text-primary uppercase ml-1 tracking-widest">Box 2 (Top Item)</label>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="space-y-1.5">
+                                        <label className="text-[9px] font-bold text-muted-foreground uppercase ml-1">Metric</label>
+                                        <Select value={prefs.metric2} onValueChange={(v) => setPrefs(prev => ({...prev, metric2: v}))}>
+                                            <SelectTrigger className="h-9 rounded-xl bg-background border-primary/5 text-xs w-full">
+                                                <SelectValue className="truncate" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {METRIC_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <label className="text-[9px] font-bold text-muted-foreground uppercase ml-1">Window</label>
+                                        <Select value={prefs.range2} onValueChange={(v) => setPrefs(prev => ({...prev, range2: v}))}>
+                                            <SelectTrigger className="h-9 rounded-xl bg-background border-primary/5 text-xs w-full">
+                                                <SelectValue className="truncate" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {RANGE_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <Button 
+                            onClick={savePrefs} 
+                            disabled={isPending}
+                            className="w-full h-10 rounded-xl font-bold shadow-lg shadow-primary/20 gap-2 mt-2"
+                        >
+                            {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                            {isPending ? "Saving..." : "Save Preferences"}
+                        </Button>
+                    </div>
+                </PopoverContent>
+            </Popover>
+        </div>
       </div>
     </div>
   )

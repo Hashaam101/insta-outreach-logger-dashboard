@@ -37,7 +37,7 @@ export function OperatorStats({ data }: OperatorStatsProps) {
                     </Badge>
                 </div>
             </CardHeader>
-            <CardContent className="pt-6 grid grid-cols-2 gap-4">
+            <CardContent className="pt-6 grid grid-cols-1 sm:grid-cols-2 gap-6">
                 <div className="space-y-2">
                     <div className="flex items-center gap-2 text-primary opacity-70">
                         <User className="h-3 w-3" />
@@ -56,7 +56,7 @@ export function OperatorStats({ data }: OperatorStatsProps) {
                     </div>
                 </div>
 
-                <div className="space-y-2 border-l border-primary/5 pl-4">
+                <div className="space-y-2 border-t sm:border-t-0 sm:border-l border-primary/5 pt-6 sm:pt-0 sm:pl-6">
                     <div className="flex items-center gap-2 text-muted-foreground">
                         <Users className="h-3 w-3" />
                         <span className="text-[10px] font-bold uppercase tracking-widest">Team Average</span>

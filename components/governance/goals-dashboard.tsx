@@ -125,14 +125,14 @@ export function GoalsDashboard({
                                         </Button>
                                     </div>
                                 </div>
-                                <div className="flex items-center gap-3">
+                                <div className="flex flex-wrap items-center justify-center md:justify-end gap-3">
                                     {/* Team Box */}
-                                    <div className="bg-primary/5 border border-primary/10 rounded-lg p-3 text-center min-w-[100px] relative group">
+                                    <div className="bg-primary/5 border border-primary/10 rounded-lg p-3 text-center min-w-[100px] flex-1 md:flex-none relative group">
                                         <p className="text-[8px] uppercase font-bold text-muted-foreground mb-1 flex items-center justify-center gap-1">
                                             <Users className="h-2 w-2" /> Team
                                         </p>
                                         <p className="text-xl font-bold">{goal.isTeam ? goal.targetValue : "—"}</p>
-                                        <p className="text-[8px] text-muted-foreground mt-1 truncate max-w-[80px]">
+                                        <p className="text-[8px] text-muted-foreground mt-1 truncate max-w-[80px] mx-auto">
                                             {goal.isTeam ? (goal.assignedTo ? `By: ${goal.assignedTo}` : "Default") : "Custom"}
                                         </p>
                                         {goal.isTeam && (
@@ -151,10 +151,10 @@ export function GoalsDashboard({
                                         )}
                                     </div>
 
-                                    <ArrowRight className="h-4 w-4 text-muted-foreground opacity-20" />
+                                    <ArrowRight className="h-4 w-4 text-muted-foreground opacity-20 hidden md:block" />
 
                                     {/* Personal Box */}
-                                    <div className="bg-background border border-primary/20 rounded-lg p-3 text-center min-w-[100px] relative group border-dashed shadow-inner">
+                                    <div className="bg-background border border-primary/20 rounded-lg p-3 text-center min-w-[100px] flex-1 md:flex-none relative group border-dashed shadow-inner">
                                         <p className="text-[8px] uppercase font-bold text-primary mb-1 flex items-center justify-center gap-1">
                                             <User className="h-2 w-2" /> My Limit
                                         </p>

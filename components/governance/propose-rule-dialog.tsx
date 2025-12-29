@@ -43,6 +43,8 @@ const formSchema = z.object({
   assignedToAct: z.string().optional(),
 })
 
+type FormValues = z.infer<typeof formSchema>
+
 const METRIC_OPTIONS = [
     "Total Messages Sent",
     "Unique Profiles Contacted",
@@ -61,8 +63,8 @@ export function ProposeRuleDialog({ operators, actors }: ProposeRuleDialogProps)
   const [open, setOpen] = React.useState(false)
   const [isPending, setIsPending] = React.useState(false)
 
-  const form = useForm<z.infer<typeof formSchema>>({
-    resolver: zodResolver(formSchema),
+  const form = useForm<FormValues>({
+    resolver: zodResolver(formSchema) as any,
     defaultValues: {
       type: "Frequency Cap",
       metric: "Total Messages Sent",
@@ -76,7 +78,7 @@ export function ProposeRuleDialog({ operators, actors }: ProposeRuleDialogProps)
 
   const watchScope = form.watch("scope")
 
-  async function onSubmit(values: z.infer<typeof formSchema>) {
+  async function onSubmit(values: FormValues) {
     setIsPending(true)
     const res = await proposeRule({
         ...values,
@@ -111,11 +113,11 @@ export function ProposeRuleDialog({ operators, actors }: ProposeRuleDialogProps)
           </DialogDescription>
         </DialogHeader>
 
-        <Form {...form}>
+        <Form {...(form as any)}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-2">
             <div className="grid grid-cols-2 gap-4">
                 <FormField
-                control={form.control}
+                control={form.control as any}
                 name="type"
                 render={({ field }) => (
                     <FormItem>
@@ -136,7 +138,7 @@ export function ProposeRuleDialog({ operators, actors }: ProposeRuleDialogProps)
                 />
 
                 <FormField
-                control={form.control}
+                control={form.control as any}
                 name="scope"
                 render={({ field }) => (
                     <FormItem>
@@ -160,7 +162,7 @@ export function ProposeRuleDialog({ operators, actors }: ProposeRuleDialogProps)
 
             {watchScope === 'Operator' && (
                 <FormField
-                control={form.control}
+                control={form.control as any}
                 name="assignedToOpr"
                 render={({ field }) => (
                     <FormItem className="animate-in fade-in slide-in-from-top-2">
@@ -184,7 +186,7 @@ export function ProposeRuleDialog({ operators, actors }: ProposeRuleDialogProps)
 
             {watchScope === 'Actor' && (
                 <FormField
-                control={form.control}
+                control={form.control as any}
                 name="assignedToAct"
                 render={({ field }) => (
                     <FormItem className="animate-in fade-in slide-in-from-top-2">
@@ -230,7 +232,7 @@ export function ProposeRuleDialog({ operators, actors }: ProposeRuleDialogProps)
 
             <div className="grid grid-cols-2 gap-4">
                 <FormField
-                control={form.control}
+                control={form.control as any}
                 name="limitValue"
                 render={({ field }) => (
                     <FormItem>
@@ -243,7 +245,7 @@ export function ProposeRuleDialog({ operators, actors }: ProposeRuleDialogProps)
                 />
 
                 <FormField
-                control={form.control}
+                control={form.control as any}
                 name="window"
                 render={({ field }) => (
                     <FormItem>
