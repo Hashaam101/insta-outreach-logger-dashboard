@@ -76,6 +76,7 @@ export default async function OnboardingPage() {
             <OnboardingForm 
                 unavailableNames={unavailableNames}
                 googleName={session.user.name || ""} 
+                googleEmail={session.user.email}
                 currentOperatorName={myOperator?.OPR_NAME}
             />
           </CardContent>

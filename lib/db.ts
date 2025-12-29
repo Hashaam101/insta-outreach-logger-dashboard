@@ -2,62 +2,40 @@ import oracledb from 'oracledb';
 import { env } from './env';
 
 /**
- * ORACLE DATABASE LAYER - Optimized for Stability & Session Management
+ * ORACLE DATABASE LAYER - Direct Connection Mode (Stability Focus)
  *
- * Key changes:
- * - Global Singleton Pattern (prevents multiple pools during hot-reloads)
- * - Conservative Pooling (reduced max sessions)
- * - Strict Connection Lifecycle
+ * Switching to connection-per-query pattern to resolve 
+ * 'Attempt to access memory outside buffer bounds' seen with pooling
+ * in some Oracle ATP / Thin driver environments.
  */
 
-// Configure oracledb for Thin mode stability
+// Configure oracledb for maximum stability
 oracledb.outFormat = oracledb.OUT_FORMAT_OBJECT;
 oracledb.autoCommit = true;
-oracledb.fetchAsString = [oracledb.NUMBER, oracledb.DATE, oracledb.CLOB];
+oracledb.fetchAsString = [oracledb.CLOB]; // Only fetch CLOB as string, handle others manually
 oracledb.stmtCacheSize = 0;
+oracledb.fetchArraySize = 50;
 
-// Singleton pattern for Next.js dev mode
-const globalForDb = global as unknown as { pool: oracledb.Pool | undefined };
+const getConnectionConfig = () => ({
+  user: env.ORACLE_USER,
+  password: env.ORACLE_PASSWORD,
+  connectString: (env.ORACLE_CONN_STRING || '').replace(/\s+/g, ''),
+});
 
-async function getPool(): Promise<oracledb.Pool> {
-  if (globalForDb.pool) return globalForDb.pool;
-
-  try {
-    const newPool = await oracledb.createPool({
-      user: env.ORACLE_USER,
-      password: env.ORACLE_PASSWORD,
-      connectString: (env.ORACLE_CONN_STRING || '').replace(/\s+/g, ''),
-      poolMin: 1,
-      poolMax: 4,      // Significantly reduced to prevent ORA-00018
-      poolIncrement: 1,
-      poolTimeout: 30, // Close idle connections faster (30s)
-      queueMax: 50,    // Allow more queries to wait rather than opening new sessions
-    });
-    
-    console.log('✅ Oracle DB Pool Initialized (Global Singleton)');
-    globalForDb.pool = newPool;
-    return newPool;
-  } catch (err) {
-    console.error('❌ Failed to create DB pool:', err);
-    throw err;
-  }
-}
-
-// Simple in-memory cache for query results
+// Simple in-memory cache
 const queryCache = new Map<string, { data: unknown; expires: number }>();
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const CACHE_TTL = 5 * 60 * 1000;
 
 /**
- * Execute a query using the connection pool
+ * Execute a query with a fresh connection every time
  */
 export async function dbQuery<T = Record<string, unknown>>(
   sql: string,
   params: Record<string, unknown> = {},
   options: { maxRetries?: number; useCache?: boolean; cacheKey?: string } = {}
 ): Promise<T[]> {
-  const { maxRetries = 3, useCache = false, cacheKey } = options;
+  const { maxRetries = 5, useCache = false, cacheKey } = options;
 
-  // Check cache first
   if (useCache && cacheKey) {
     const cached = queryCache.get(cacheKey);
     if (cached && cached.expires > Date.now()) {
@@ -71,8 +49,8 @@ export async function dbQuery<T = Record<string, unknown>>(
     let conn: oracledb.Connection | undefined;
 
     try {
-      const dbPool = await getPool();
-      conn = await dbPool.getConnection();
+      // Get a fresh connection
+      conn = await oracledb.getConnection(getConnectionConfig());
 
       const result = await conn.execute<T>(sql, params, {
         outFormat: oracledb.OUT_FORMAT_OBJECT,
@@ -80,7 +58,7 @@ export async function dbQuery<T = Record<string, unknown>>(
         maxRows: 1000,
       });
 
-      // Close connection immediately to return to pool
+      // Always close immediately
       await conn.close();
       conn = undefined;
 
@@ -102,13 +80,14 @@ export async function dbQuery<T = Record<string, unknown>>(
 
       const isRetryable =
         err.code === 'ERR_BUFFER_OUT_OF_BOUNDS' ||
-        err.code === 'ORA-00018' || // Retry session limits
+        err.code === 'ORA-00018' ||
         err.code?.startsWith('NJS-') ||
         err.message?.includes('buffer') ||
+        err.message?.includes('memory') ||
         err.message?.includes('ORA-');
 
       if (isRetryable && attempt < maxRetries - 1) {
-        // Backoff: 1s, 2s, 4s
+        console.warn(`⚠️ DB Retry ${attempt + 1}/${maxRetries} (${err.code || 'Error'})`);
         await new Promise(r => setTimeout(r, 1000 * Math.pow(2, attempt)));
         continue;
       }
@@ -155,7 +134,7 @@ export async function dbQuerySingle<T = Record<string, unknown>>(
   sql: string,
   params: Record<string, unknown> = {}
 ): Promise<T | null> {
-  const rows = await dbQuery<T>(sql, params);
+  const rows = await dbQuery<T>(sql, params, { maxRetries: 5 });
   return rows[0] || null;
 }
 
@@ -198,6 +177,6 @@ export async function dbQuerySingleCached<T = Record<string, unknown>>(
   params: Record<string, unknown>,
   cacheKey: string
 ): Promise<T | null> {
-  const rows = await dbQuery<T>(sql, params, { useCache: true, cacheKey });
+  const rows = await dbQuery<T>(sql, params, { useCache: true, cacheKey, maxRetries: 5 });
   return rows[0] || null;
 }

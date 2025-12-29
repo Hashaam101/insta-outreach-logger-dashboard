@@ -49,13 +49,9 @@ export const getCachedDashboardMetrics = cache(unstable_cache(
         // Filter logic: If operatorName is provided, we need to resolve OPR_ID first or join on OPR_NAME
         // Assuming operatorName corresponds to OPR_NAME in OPERATORS table.
         
-        const logFilter = operatorName 
-            ? `JOIN ACTORS a ON l.ACT_ID = a.ACT_ID JOIN OPERATORS o ON a.OPR_ID = o.OPR_ID WHERE o.OPR_NAME = :op`
-            : ``;
-        
         // For Targets (Prospects), we count distinct TARGETS contacted by this Operator's Actors
         const targetJoin = operatorName
-            ? `JOIN EVENT_LOGS e ON t.TAR_ID = e.TAR_ID JOIN OPERATORS o ON e.OPR_ID = o.OPR_ID WHERE o.OPR_NAME = :op`
+            ? `JOIN EVENT_LOGS e ON t.TAR_ID = e.TAR_ID JOIN OPERATORS o ON e.OPR_ID = o.OPR_ID WHERE o.OPR_NAME = :op AND e.EVENT_TYPE = 'Outreach'`
             : `WHERE 1=1`;
 
         // Note: l.ACT_ID links OUTREACH_LOGS -> EVENT_LOGS -> ACTORS. 
@@ -84,6 +80,8 @@ export const getCachedDashboardMetrics = cache(unstable_cache(
 export interface OperatorBasic {
   OPR_ID: string;
   OPR_NAME: string;
+  OPR_EMAIL: string;
+  OPR_STATUS: string;
 }
 
 /**
@@ -93,12 +91,12 @@ export interface OperatorBasic {
 export const getCachedOperators = cache(unstable_cache(
     async () => {
         return await dbQuery<OperatorBasic>(`
-            SELECT OPR_ID, OPR_NAME
+            SELECT OPR_ID, OPR_NAME, OPR_EMAIL, OPR_STATUS
             FROM OPERATORS
             ORDER BY OPR_NAME ASC
         `);
     },
-    ["operators-list-v1"],
+    ["operators-list-v2"],
     { revalidate: 900, tags: ["operators"] }  // 15 min cache
 ));
 
@@ -130,46 +128,340 @@ export interface ActorWithStats {
   OPR_ID: string;
   OPR_NAME: string;
   ACT_STATUS: string;
-  TOTAL_DMS: string;
-  TOTAL_BOOKED: string;
+  
+  // Range 1 Personal
+  P1_DMS: string;
+  P1_TARGETS: string;
+  P1_REPLIES: string;
+  P1_WARM: string;
+  P1_BOOKED: string;
+  P1_PAID: string;
+  
+  // Range 1 Fleet (Global for actor handle)
+  F1_DMS: string;
+  F1_TARGETS: string;
+  F1_REPLIES: string;
+  F1_WARM: string;
+  F1_BOOKED: string;
+  F1_PAID: string;
+
+  // Range 2 Personal
+  P2_DMS: string;
+  P2_TARGETS: string;
+  P2_REPLIES: string;
+  P2_WARM: string;
+  P2_BOOKED: string;
+  P2_PAID: string;
+
+  // Range 2 Fleet (Global for actor handle)
+  F2_DMS: string;
+  F2_TARGETS: string;
+  F2_REPLIES: string;
+  F2_WARM: string;
+  F2_BOOKED: string;
+  F2_PAID: string;
 }
 
-/**
- * Actor Performance - SINGLE QUERY VERSION
- * Fetches actors with stats in ONE query to avoid multiple DB round-trips
- */
 export const getCachedActorsWithStats = cache(unstable_cache(
-    async (operatorName?: string) => {
+    async (filters: {
+        operatorNames?: string[];
+        statuses?: string[];
+        handles?: string[];
+        range1?: string;
+        range2?: string;
+    } = {}) => {
         try {
-            // Single query with all data - no separate stats queries
+            const { operatorNames, statuses, handles, range1 = 'All Time', range2 = 'All Time' } = filters;
+            const whereConditions: string[] = [];
+            const queryParams: Record<string, string | number> = {};
+
+            const getTimeFilter = (range: string) => {
+                if (range === 'Today') return "AND el.CREATED_AT >= TRUNC(SYSDATE)";
+                if (range === 'This Week') return "AND el.CREATED_AT >= TRUNC(SYSDATE, 'IW')";
+                if (range === 'This Month') return "AND el.CREATED_AT >= TRUNC(SYSDATE, 'MM')";
+                return ""; // All Time
+            };
+
+            const f1 = getTimeFilter(range1);
+            const f2 = getTimeFilter(range2);
+
+            if (operatorNames && operatorNames.length > 0) {
+                const keys = operatorNames.map((_, i) => `:op${i}`);
+                whereConditions.push(`o.OPR_NAME IN (${keys.join(', ')})`);
+                operatorNames.forEach((n, i) => { queryParams[`op${i}`] = n; });
+            }
+
+            if (statuses && statuses.length > 0) {
+                const keys = statuses.map((_, i) => `:st${i}`);
+                whereConditions.push(`a.ACT_STATUS IN (${keys.join(', ')})`);
+                statuses.forEach((s, i) => { queryParams[`st${i}`] = s; });
+            }
+
+            if (handles && handles.length > 0) {
+                const keys = handles.map((_, i) => `:ha${i}`);
+                whereConditions.push(`a.ACT_USERNAME IN (${keys.join(', ')})`);
+                handles.forEach((h, i) => { queryParams[`ha${i}`] = h; });
+            }
+
+            const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(" AND ")}` : "";
+
             const query = `
+                WITH p1 AS (
+                    SELECT el.ACT_ID,
+                        COUNT(CASE WHEN el.EVENT_TYPE = 'Outreach' THEN 1 END) as DM,
+                        COUNT(DISTINCT CASE WHEN el.EVENT_TYPE = 'Outreach' THEN el.TAR_ID END) as TRG,
+                        COUNT(DISTINCT CASE WHEN el.EVENT_TYPE = 'Outreach' AND t.TAR_STATUS IN ('Replied', 'Warm', 'Booked', 'Paid') THEN t.TAR_ID END) as RPL,
+                        COUNT(DISTINCT CASE WHEN el.EVENT_TYPE = 'Outreach' AND t.TAR_STATUS IN ('Warm', 'Booked', 'Paid') THEN t.TAR_ID END) as WRM,
+                        COUNT(DISTINCT CASE WHEN el.EVENT_TYPE = 'Outreach' AND t.TAR_STATUS IN ('Booked', 'Paid') THEN t.TAR_ID END) as BKD,
+                        COUNT(DISTINCT CASE WHEN el.EVENT_TYPE = 'Outreach' AND t.TAR_STATUS = 'Paid' THEN t.TAR_ID END) as PAD
+                    FROM EVENT_LOGS el JOIN TARGETS t ON el.TAR_ID = t.TAR_ID
+                    WHERE 1=1 ${f1} GROUP BY el.ACT_ID
+                ),
+                g1 AS (
+                    SELECT aa.ACT_USERNAME,
+                        COUNT(CASE WHEN el.EVENT_TYPE = 'Outreach' THEN 1 END) as DM,
+                        COUNT(DISTINCT CASE WHEN el.EVENT_TYPE = 'Outreach' THEN el.TAR_ID END) as TRG,
+                        COUNT(DISTINCT CASE WHEN el.EVENT_TYPE = 'Outreach' AND t.TAR_STATUS IN ('Replied', 'Warm', 'Booked', 'Paid') THEN t.TAR_ID END) as RPL,
+                        COUNT(DISTINCT CASE WHEN el.EVENT_TYPE = 'Outreach' AND t.TAR_STATUS IN ('Warm', 'Booked', 'Paid') THEN t.TAR_ID END) as WRM,
+                        COUNT(DISTINCT CASE WHEN el.EVENT_TYPE = 'Outreach' AND t.TAR_STATUS IN ('Booked', 'Paid') THEN t.TAR_ID END) as BKD,
+                        COUNT(DISTINCT CASE WHEN el.EVENT_TYPE = 'Outreach' AND t.TAR_STATUS = 'Paid' THEN t.TAR_ID END) as PAD
+                    FROM EVENT_LOGS el JOIN ACTORS aa ON el.ACT_ID = aa.ACT_ID JOIN TARGETS t ON el.TAR_ID = t.TAR_ID
+                    WHERE 1=1 ${f1} GROUP BY aa.ACT_USERNAME
+                ),
+                p2 AS (
+                    SELECT el.ACT_ID,
+                        COUNT(CASE WHEN el.EVENT_TYPE = 'Outreach' THEN 1 END) as DM,
+                        COUNT(DISTINCT CASE WHEN el.EVENT_TYPE = 'Outreach' THEN el.TAR_ID END) as TRG,
+                        COUNT(DISTINCT CASE WHEN el.EVENT_TYPE = 'Outreach' AND t.TAR_STATUS IN ('Replied', 'Warm', 'Booked', 'Paid') THEN t.TAR_ID END) as RPL,
+                        COUNT(DISTINCT CASE WHEN el.EVENT_TYPE = 'Outreach' AND t.TAR_STATUS IN ('Warm', 'Booked', 'Paid') THEN t.TAR_ID END) as WRM,
+                        COUNT(DISTINCT CASE WHEN el.EVENT_TYPE = 'Outreach' AND t.TAR_STATUS IN ('Booked', 'Paid') THEN t.TAR_ID END) as BKD,
+                        COUNT(DISTINCT CASE WHEN el.EVENT_TYPE = 'Outreach' AND t.TAR_STATUS = 'Paid' THEN t.TAR_ID END) as PAD
+                    FROM EVENT_LOGS el JOIN TARGETS t ON el.TAR_ID = t.TAR_ID
+                    WHERE 1=1 ${f2} GROUP BY el.ACT_ID
+                ),
+                g2 AS (
+                    SELECT aa.ACT_USERNAME,
+                        COUNT(CASE WHEN el.EVENT_TYPE = 'Outreach' THEN 1 END) as DM,
+                        COUNT(DISTINCT CASE WHEN el.EVENT_TYPE = 'Outreach' THEN el.TAR_ID END) as TRG,
+                        COUNT(DISTINCT CASE WHEN el.EVENT_TYPE = 'Outreach' AND t.TAR_STATUS IN ('Replied', 'Warm', 'Booked', 'Paid') THEN t.TAR_ID END) as RPL,
+                        COUNT(DISTINCT CASE WHEN el.EVENT_TYPE = 'Outreach' AND t.TAR_STATUS IN ('Warm', 'Booked', 'Paid') THEN t.TAR_ID END) as WRM,
+                        COUNT(DISTINCT CASE WHEN el.EVENT_TYPE = 'Outreach' AND t.TAR_STATUS IN ('Booked', 'Paid') THEN t.TAR_ID END) as BKD,
+                        COUNT(DISTINCT CASE WHEN el.EVENT_TYPE = 'Outreach' AND t.TAR_STATUS = 'Paid' THEN t.TAR_ID END) as PAD
+                    FROM EVENT_LOGS el JOIN ACTORS aa ON el.ACT_ID = aa.ACT_ID JOIN TARGETS t ON el.TAR_ID = t.TAR_ID
+                    WHERE 1=1 ${f2} GROUP BY aa.ACT_USERNAME
+                )
                 SELECT
-                    a.ACT_ID,
-                    a.ACT_USERNAME,
-                    a.OPR_ID,
-                    o.OPR_NAME,
-                    a.ACT_STATUS,
-                    TO_CHAR(NVL(stats.DM_COUNT, 0)) as TOTAL_DMS,
-                    '0' as TOTAL_BOOKED
+                    a.ACT_ID, a.ACT_USERNAME, a.OPR_ID, o.OPR_NAME, a.ACT_STATUS,
+                    TO_CHAR(NVL(p1.DM, 0)) as P1_DMS, TO_CHAR(NVL(p1.TRG, 0)) as P1_TARGETS, TO_CHAR(NVL(p1.RPL, 0)) as P1_REPLIES,
+                    TO_CHAR(NVL(p1.WRM, 0)) as P1_WARM, TO_CHAR(NVL(p1.BKD, 0)) as P1_BOOKED, TO_CHAR(NVL(p1.PAD, 0)) as P1_PAID,
+                    TO_CHAR(NVL(g1.DM, 0)) as F1_DMS, TO_CHAR(NVL(g1.TRG, 0)) as F1_TARGETS, TO_CHAR(NVL(g1.RPL, 0)) as F1_REPLIES,
+                    TO_CHAR(NVL(g1.WRM, 0)) as F1_WARM, TO_CHAR(NVL(g1.BKD, 0)) as F1_BOOKED, TO_CHAR(NVL(g1.PAD, 0)) as F1_PAID,
+                    TO_CHAR(NVL(p2.DM, 0)) as P2_DMS, TO_CHAR(NVL(p2.TRG, 0)) as P2_TARGETS, TO_CHAR(NVL(p2.RPL, 0)) as P2_REPLIES,
+                    TO_CHAR(NVL(p2.WRM, 0)) as P2_WARM, TO_CHAR(NVL(p2.BKD, 0)) as P2_BOOKED, TO_CHAR(NVL(p2.PAD, 0)) as P2_PAID,
+                    TO_CHAR(NVL(g2.DM, 0)) as F2_DMS, TO_CHAR(NVL(g2.TRG, 0)) as F2_TARGETS, TO_CHAR(NVL(g2.RPL, 0)) as F2_REPLIES,
+                    TO_CHAR(NVL(g2.WRM, 0)) as F2_WARM, TO_CHAR(NVL(g2.BKD, 0)) as F2_BOOKED, TO_CHAR(NVL(g2.PAD, 0)) as F2_PAID
                 FROM ACTORS a
                 JOIN OPERATORS o ON a.OPR_ID = o.OPR_ID
-                LEFT JOIN (
-                    SELECT ACT_ID, COUNT(*) as DM_COUNT
-                    FROM EVENT_LOGS
-                    WHERE EVENT_TYPE = 'Outreach'
-                    GROUP BY ACT_ID
-                ) stats ON a.ACT_ID = stats.ACT_ID
-                ${operatorName ? 'WHERE o.OPR_NAME = :op' : ''}
-                ORDER BY NVL(stats.DM_COUNT, 0) DESC
+                LEFT JOIN p1 ON a.ACT_ID = p1.ACT_ID
+                LEFT JOIN g1 ON a.ACT_USERNAME = g1.ACT_USERNAME
+                LEFT JOIN p2 ON a.ACT_ID = p2.ACT_ID
+                LEFT JOIN g2 ON a.ACT_USERNAME = g2.ACT_USERNAME
+                ${whereClause}
+                ORDER BY a.ACT_USERNAME ASC, o.OPR_NAME ASC
             `;
-            return await dbQuery<ActorWithStats>(query, operatorName ? { op: operatorName } : {});
+            return await dbQuery<ActorWithStats>(query, queryParams);
         } catch (e) {
             console.error('Failed to fetch actors:', e);
             return [];
         }
     },
-    ["actors-stats-v9"],
+    ["actors-stats-v14"],
     { revalidate: 900, tags: ["actors", "logs"] }
+));
+
+/**
+ * Detailed Operator Stats - Trend, Actor Breakdown & Lead Distribution
+ */
+export const getOperatorDetailedStats = cache(unstable_cache(
+    async (operatorName: string) => {
+        try {
+            // 1. Operator Metadata
+            const info = await dbQuery<OperatorBasic & { CREATED_AT: string, LAST_ACTIVITY: string }>(`
+                SELECT OPR_ID, OPR_NAME, OPR_EMAIL, OPR_STATUS,
+                       TO_CHAR(CREATED_AT, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as CREATED_AT,
+                       TO_CHAR(LAST_ACTIVITY, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as LAST_ACTIVITY
+                FROM OPERATORS 
+                WHERE OPR_NAME = :name
+            `, { name: operatorName });
+
+            // 2. 14-day volume trend
+            const volume = await dbQuery<{ LOG_DATE: string, TOTAL: string }>(`
+                SELECT TO_CHAR(TRUNC(ol.SENT_AT), 'YYYY-MM-DD') as LOG_DATE, TO_CHAR(COUNT(*)) as TOTAL 
+                FROM OUTREACH_LOGS ol
+                JOIN EVENT_LOGS el ON ol.ELG_ID = el.ELG_ID
+                JOIN OPERATORS o ON el.OPR_ID = o.OPR_ID
+                WHERE o.OPR_NAME = :name AND ol.SENT_AT >= SYSDATE - 14
+                GROUP BY TRUNC(ol.SENT_AT) 
+                ORDER BY LOG_DATE ASC
+            `, { name: operatorName });
+
+            // 3. Actor Breakdown (How many DMs sent per actor account)
+            const actorBreakdown = await dbQuery<{ ACT_USERNAME: string, TOTAL: string }>(`
+                SELECT a.ACT_USERNAME, TO_CHAR(COUNT(*)) as TOTAL
+                FROM EVENT_LOGS el
+                JOIN ACTORS a ON el.ACT_ID = a.ACT_ID
+                JOIN OPERATORS o ON el.OPR_ID = o.OPR_ID
+                WHERE o.OPR_NAME = :name AND el.EVENT_TYPE = 'Outreach'
+                GROUP BY a.ACT_USERNAME
+                ORDER BY TO_NUMBER(TOTAL) DESC
+            `, { name: operatorName });
+
+            // 4. Status Distribution (Success of this operator's outreach)
+            const statusDistribution = await dbQuery<{ STATUS: string, TOTAL: string }>(`
+                SELECT t.TAR_STATUS as STATUS, TO_CHAR(COUNT(DISTINCT t.TAR_ID)) as TOTAL
+                FROM EVENT_LOGS el
+                JOIN TARGETS t ON el.TAR_ID = t.TAR_ID
+                JOIN OPERATORS o ON el.OPR_ID = o.OPR_ID
+                WHERE o.OPR_NAME = :name AND el.EVENT_TYPE = 'Outreach'
+                GROUP BY t.TAR_STATUS
+                ORDER BY TOTAL DESC
+            `, { name: operatorName });
+
+            // 5. Recent Activity
+            const recentLogs = await dbQuery<OutreachLogView & { TAR_STATUS: string }>(`
+                SELECT
+                    t.TAR_USERNAME,
+                    t.TAR_STATUS,
+                    SUBSTR(ol.MESSAGE_TEXT, 1, 500) as MESSAGE_TEXT,
+                    TO_CHAR(ol.SENT_AT, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as SENT_AT,
+                    o.OPR_NAME,
+                    a.ACT_USERNAME
+                FROM OUTREACH_LOGS ol
+                JOIN EVENT_LOGS el ON ol.ELG_ID = el.ELG_ID
+                JOIN ACTORS a ON el.ACT_ID = a.ACT_ID
+                JOIN OPERATORS o ON el.OPR_ID = o.OPR_ID
+                JOIN TARGETS t ON el.TAR_ID = t.TAR_ID
+                WHERE o.OPR_NAME = :name
+                ORDER BY ol.SENT_AT DESC
+                FETCH FIRST 10 ROWS ONLY
+            `, { name: operatorName });
+
+            const totalDms = actorBreakdown.reduce((acc, curr) => acc + Number(curr.TOTAL), 0);
+
+            return {
+                info: info[0],
+                volume,
+                actorBreakdown,
+                statusDistribution,
+                recentLogs,
+                totalDms
+            };
+        } catch (e) {
+            console.error('Failed to fetch detailed operator stats:', e);
+            return null;
+        }
+    },
+    ["operator-detailed-stats-v1"],
+    { revalidate: 300, tags: ["operators", "logs"] }
+));
+
+/**
+ * Detailed Actor Stats - Weekly Trend & Operator Breakdown
+ */
+export const getActorDetailedStats = cache(unstable_cache(
+    async (actorHandle: string) => {
+        try {
+            // 1. Actor Metadata (Since it's shared, we get common info and first/last activity)
+            const actorInfo = await dbQuery<{ 
+                ACT_STATUS: string, 
+                CREATED_AT: string, 
+                LAST_ACTIVITY: string,
+                TOTAL_SEATS: string 
+            }>(`
+                SELECT 
+                    MAX(ACT_STATUS) as ACT_STATUS,
+                    TO_CHAR(MIN(CREATED_AT), 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as CREATED_AT,
+                    TO_CHAR(MAX(LAST_ACTIVITY), 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as LAST_ACTIVITY,
+                    TO_CHAR(COUNT(*)) as TOTAL_SEATS
+                FROM ACTORS 
+                WHERE ACT_USERNAME = :handle
+            `, { handle: actorHandle });
+
+            // 2. 14-day volume
+            const volume = await dbQuery<{ LOG_DATE: string, TOTAL: string }>(`
+                SELECT TO_CHAR(TRUNC(ol.SENT_AT), 'YYYY-MM-DD') as LOG_DATE, TO_CHAR(COUNT(*)) as TOTAL 
+                FROM OUTREACH_LOGS ol
+                JOIN EVENT_LOGS el ON ol.ELG_ID = el.ELG_ID
+                JOIN ACTORS a ON el.ACT_ID = a.ACT_ID
+                WHERE a.ACT_USERNAME = :handle AND ol.SENT_AT >= SYSDATE - 14
+                GROUP BY TRUNC(ol.SENT_AT) 
+                ORDER BY LOG_DATE ASC
+            `, { handle: actorHandle });
+
+            // 3. Operator breakdown
+            const operatorBreakdown = await dbQuery<{ OPR_NAME: string, TOTAL: string }>(`
+                SELECT o.OPR_NAME, TO_CHAR(COUNT(*)) as TOTAL
+                FROM EVENT_LOGS el
+                JOIN ACTORS a ON el.ACT_ID = a.ACT_ID
+                JOIN OPERATORS o ON el.OPR_ID = o.OPR_ID
+                WHERE a.ACT_USERNAME = :handle AND el.EVENT_TYPE = 'Outreach'
+                GROUP BY o.OPR_NAME
+                ORDER BY TO_NUMBER(TOTAL) DESC
+            `, { handle: actorHandle });
+
+            // 4. Recent logs with Target details
+            const recentLogs = await dbQuery<OutreachLogView & { TAR_STATUS: string, CONT_SOURCE: string }>(`
+                SELECT
+                    t.TAR_USERNAME,
+                    t.TAR_STATUS,
+                    t.CONT_SOURCE,
+                    SUBSTR(ol.MESSAGE_TEXT, 1, 500) as MESSAGE_TEXT,
+                    TO_CHAR(ol.SENT_AT, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as SENT_AT,
+                    o.OPR_NAME,
+                    a.ACT_USERNAME
+                FROM OUTREACH_LOGS ol
+                JOIN EVENT_LOGS el ON ol.ELG_ID = el.ELG_ID
+                JOIN ACTORS a ON el.ACT_ID = a.ACT_ID
+                JOIN OPERATORS o ON el.OPR_ID = o.OPR_ID
+                JOIN TARGETS t ON el.TAR_ID = t.TAR_ID
+                WHERE a.ACT_USERNAME = :handle
+                ORDER BY ol.SENT_AT DESC
+                FETCH FIRST 10 ROWS ONLY
+            `, { handle: actorHandle });
+
+            // 5. Event Type Distribution
+            const eventDistribution = await dbQuery<{ EVENT_TYPE: string, TOTAL: string }>(`
+                SELECT el.EVENT_TYPE, TO_CHAR(COUNT(*)) as TOTAL
+                FROM EVENT_LOGS el
+                JOIN ACTORS a ON el.ACT_ID = a.ACT_ID
+                WHERE a.ACT_USERNAME = :handle
+                GROUP BY el.EVENT_TYPE
+                ORDER BY TOTAL DESC
+            `, { handle: actorHandle });
+
+            // Calculate total lifetime DMs
+            const totalDms = operatorBreakdown.reduce((acc, curr) => acc + Number(curr.TOTAL), 0);
+
+            return { 
+                info: actorInfo[0] || {
+                    ACT_STATUS: 'Active',
+                    CREATED_AT: null,
+                    LAST_ACTIVITY: null,
+                    TOTAL_SEATS: '0'
+                },
+                volume, 
+                operatorBreakdown, 
+                recentLogs, 
+                eventDistribution,
+                totalDms 
+            };
+        } catch (e) {
+            console.error('Failed to fetch detailed actor stats:', e);
+            return null;
+        }
+    },
+    ["actor-detailed-stats-v2"],
+    { revalidate: 300, tags: ["actors", "logs"] }
 ));
 
 export interface OutreachLogView {
@@ -192,7 +484,7 @@ export const getCachedRecentLogs = cache(unstable_cache(
             SELECT
                 t.TAR_USERNAME,
                 SUBSTR(ol.MESSAGE_TEXT, 1, 500) as MESSAGE_TEXT,
-                TO_CHAR(ol.SENT_AT, 'YYYY-MM-DD HH24:MI:SS') as SENT_AT,
+                TO_CHAR(ol.SENT_AT, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as SENT_AT,
                 o.OPR_NAME,
                 a.ACT_USERNAME
             FROM OUTREACH_LOGS ol
@@ -320,8 +612,7 @@ export const getCachedStatusDistribution = cache(unstable_cache(
     // Interpretation: Targets that *this operator* (via their actors) has interacted with.
     
     let joinClause = "";
-    let whereClause = "";
-    const params: any = {};
+    const params: Record<string, string | number> = {};
 
     if (operatorName) {
         joinClause = `
@@ -329,7 +620,7 @@ export const getCachedStatusDistribution = cache(unstable_cache(
                 SELECT DISTINCT TAR_ID 
                 FROM EVENT_LOGS el 
                 JOIN OPERATORS o ON el.OPR_ID = o.OPR_ID 
-                WHERE o.OPR_NAME = :op
+                WHERE o.OPR_NAME = :op AND el.EVENT_TYPE = 'Outreach'
             ) my_tars ON t.TAR_ID = my_tars.TAR_ID
         `;
         params.op = operatorName;
@@ -414,58 +705,93 @@ export interface PagedResult<T> {
   }
 }
 
+export interface OutreachLogView {
+  TAR_USERNAME: string;
+  MESSAGE_TEXT: string;
+  SENT_AT: string;
+  OPR_NAME: string;
+  ACT_USERNAME: string;
+  EVENT_TYPE: string;
+  DETAILS: string;
+}
+
 /**
- * Paginated Logs - SINGLE QUERY with COUNT(*) OVER()
+ * Paginated Logs - Comprehensive activity stream from EVENT_LOGS
  */
 export const getPagedLogs = async (
   page: number = 1,
   pageSize: number = 20,
   filters: {
-    operatorName?: string;
-    actorUsername?: string;
+    operatorNames?: string[];
+    actorUsernames?: string[];
+    eventTypes?: string[];
+    query?: string;
+    timeRange?: string;
   } = {}
-): Promise<PagedResult<any>> => {
-    const { operatorName, actorUsername } = filters;
+): Promise<PagedResult<OutreachLogView>> => {
+    const { operatorNames, actorUsernames, eventTypes, query, timeRange = 'All Time' } = filters;
     const whereConditions: string[] = [];
-    const queryParams: Record<string, any> = {};
+    const queryParams: Record<string, string | number> = {};
 
-    if (operatorName) {
-        whereConditions.push("o.OPR_NAME = :op");
-        queryParams.op = operatorName;
+    if (query) {
+        whereConditions.push("(LOWER(t.TAR_USERNAME) LIKE :q OR LOWER(ol.MESSAGE_TEXT) LIKE :q OR LOWER(el.DETAILS) LIKE :q)");
+        queryParams.q = `%${query.toLowerCase()}%`;
     }
 
-    if (actorUsername) {
-        whereConditions.push("a.ACT_USERNAME = :actor");
-        queryParams.actor = actorUsername;
+    if (timeRange === 'Today') {
+        whereConditions.push("el.CREATED_AT >= TRUNC(SYSDATE)");
+    } else if (timeRange === 'This Week') {
+        whereConditions.push("el.CREATED_AT >= TRUNC(SYSDATE, 'IW')");
+    } else if (timeRange === 'This Month') {
+        whereConditions.push("el.CREATED_AT >= TRUNC(SYSDATE, 'MM')");
+    }
+
+    if (operatorNames && operatorNames.length > 0) {
+        const keys = operatorNames.map((_, i) => `:op${i}`);
+        whereConditions.push(`o.OPR_NAME IN (${keys.join(', ')})`);
+        operatorNames.forEach((n, i) => { queryParams[`op${i}`] = n; });
+    }
+
+    if (actorUsernames && actorUsernames.length > 0) {
+        const keys = actorUsernames.map((_, i) => `:act${i}`);
+        whereConditions.push(`a.ACT_USERNAME IN (${keys.join(', ')})`);
+        actorUsernames.forEach((n, i) => { queryParams[`act${i}`] = n; });
+    }
+
+    if (eventTypes && eventTypes.length > 0) {
+        const keys = eventTypes.map((_, i) => `:et${i}`);
+        whereConditions.push(`el.EVENT_TYPE IN (${keys.join(', ')})`);
+        eventTypes.forEach((et, i) => { queryParams[`et${i}`] = et; });
     }
 
     const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(" AND ")}` : "";
     const offset = (page - 1) * pageSize;
 
-    // Single query with COUNT(*) OVER() for total
     const sql = `
         SELECT
-            t.TAR_USERNAME as "target_username",
-            SUBSTR(ol.MESSAGE_TEXT, 1, 500) as "message_text",
-            TO_CHAR(ol.SENT_AT, 'YYYY-MM-DD HH24:MI:SS') as "created_at",
-            o.OPR_NAME as "operator_name",
-            a.ACT_USERNAME as "actor_username",
+            t.TAR_USERNAME as "TAR_USERNAME",
+            SUBSTR(ol.MESSAGE_TEXT, 1, 500) as "MESSAGE_TEXT",
+            TO_CHAR(COALESCE(ol.SENT_AT, el.CREATED_AT), 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as "SENT_AT",
+            o.OPR_NAME as "OPR_NAME",
+            a.ACT_USERNAME as "ACT_USERNAME",
+            el.EVENT_TYPE as "EVENT_TYPE",
+            SUBSTR(el.DETAILS, 1, 500) as "DETAILS",
             TO_CHAR(COUNT(*) OVER()) as "total_count"
-        FROM OUTREACH_LOGS ol
-        JOIN EVENT_LOGS el ON ol.ELG_ID = el.ELG_ID
+        FROM EVENT_LOGS el
+        LEFT JOIN OUTREACH_LOGS ol ON el.ELG_ID = ol.ELG_ID
         JOIN ACTORS a ON el.ACT_ID = a.ACT_ID
         JOIN OPERATORS o ON el.OPR_ID = o.OPR_ID
         JOIN TARGETS t ON el.TAR_ID = t.TAR_ID
         ${whereClause}
-        ORDER BY ol.SENT_AT DESC
+        ORDER BY COALESCE(ol.SENT_AT, el.CREATED_AT) DESC
         OFFSET :offset ROWS FETCH NEXT :limit ROWS ONLY
     `;
 
-    const data = await dbQuery<any>(sql, { ...queryParams, offset, limit: pageSize });
+    const data = await dbQuery<OutreachLogView & { total_count: string }>(sql, { ...queryParams, offset, limit: pageSize });
     const total = data[0]?.total_count ? parseInt(data[0].total_count, 10) : 0;
 
     // Remove total_count from each row
-    const cleanData = data.map(({ total_count, ...rest }) => rest);
+    const cleanData = data.map(({ total_count: _, ...rest }) => rest);
 
     return {
         data: cleanData,
@@ -478,6 +804,17 @@ export const getPagedLogs = async (
     };
 };
 
+export interface LeadView {
+    target_username: string;
+    status: string;
+    last_updated: string;
+    email: string;
+    phone_number: string;
+    source_summary: string;
+    notes: string;
+    actors_list: string | null;
+}
+
 /**
  * Paginated Leads (Targets) - SINGLE QUERY with COUNT(*) OVER()
  */
@@ -489,15 +826,24 @@ export const getPagedLeads = async (
         statuses?: string[];
         operators?: string[];
         actors?: string[];
+        timeRange?: string;
     }
-): Promise<PagedResult<any>> => {
-    const { query, statuses, operators, actors } = filters;
+): Promise<PagedResult<LeadView>> => {
+    const { query, statuses, operators, actors, timeRange = 'All Time' } = filters;
     const whereConditions: string[] = [];
-    const queryParams: Record<string, any> = {};
+    const queryParams: Record<string, string | number> = {};
 
     if (query) {
         whereConditions.push("LOWER(t.TAR_USERNAME) LIKE :q");
         queryParams.q = `%${query.toLowerCase()}%`;
+    }
+
+    if (timeRange === 'Today') {
+        whereConditions.push("t.LAST_UPDATED >= TRUNC(SYSDATE)");
+    } else if (timeRange === 'This Week') {
+        whereConditions.push("t.LAST_UPDATED >= TRUNC(SYSDATE, 'IW')");
+    } else if (timeRange === 'This Month') {
+        whereConditions.push("t.LAST_UPDATED >= TRUNC(SYSDATE, 'MM')");
     }
 
     if (statuses && statuses.length > 0) {
@@ -511,12 +857,6 @@ export const getPagedLeads = async (
     let fromClause = "FROM TARGETS t";
 
     // Filtering by Operators or Actors requires joining with EVENT_LOGS/ACTORS/OPERATORS
-    // Logic: Targets touched by ANY of the selected operators OR actors.
-    // If both are present, it's usually an OR or AND?
-    // Let's assume strict filtering: If operators are selected, show targets touched by them.
-    // If actors selected, show targets touched by them.
-    // If both, we can join based on the union of logic or just use one join block with dynamic WHERE.
-
     if ((operators && operators.length > 0) || (actors && actors.length > 0)) {
         fromClause += `
             JOIN (
@@ -556,11 +896,17 @@ export const getPagedLeads = async (
         SELECT
             t.TAR_USERNAME as "target_username",
             t.TAR_STATUS as "status",
-            TO_CHAR(t.LAST_UPDATED, 'YYYY-MM-DD HH24:MI:SS') as "last_updated",
+            TO_CHAR(t.LAST_UPDATED, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as "last_updated",
             t.EMAIL as "email",
             t.PHONE_NUM as "phone_number",
             SUBSTR(t.CONT_SOURCE, 1, 500) as "source_summary",
             SUBSTR(t.NOTES, 1, 2000) as "notes",
+            (
+                SELECT LISTAGG(aa.ACT_USERNAME, ', ') WITHIN GROUP (ORDER BY aa.ACT_USERNAME)
+                FROM (SELECT DISTINCT el.ACT_ID, el.TAR_ID FROM EVENT_LOGS el WHERE el.EVENT_TYPE = 'Outreach') sub
+                JOIN ACTORS aa ON sub.ACT_ID = aa.ACT_ID
+                WHERE sub.TAR_ID = t.TAR_ID
+            ) as "actors_list",
             TO_CHAR(COUNT(*) OVER()) as "total_count"
         ${fromClause}
         ${whereClause}
@@ -568,11 +914,11 @@ export const getPagedLeads = async (
         OFFSET :offset ROWS FETCH NEXT :limit ROWS ONLY
     `;
 
-    const data = await dbQuery<any>(sql, { ...queryParams, offset, limit: pageSize });
+    const data = await dbQuery<LeadView & { total_count: string }>(sql, { ...queryParams, offset, limit: pageSize });
     const total = data[0]?.total_count ? parseInt(data[0].total_count, 10) : 0;
 
     // Remove total_count from each row
-    const cleanData = data.map(({ total_count, ...rest }) => rest);
+    const cleanData = data.map(({ total_count: _, ...rest }) => rest);
 
     return {
         data: cleanData,

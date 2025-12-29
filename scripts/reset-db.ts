@@ -46,8 +46,9 @@ async function run() {
           // PURGE removes it from Recycle Bin immediately
           await connection.execute(`DROP TABLE "${table}" CASCADE CONSTRAINTS PURGE`);
           console.log(`   - Dropped ${table}`);
-        } catch (err: any) {
-          console.error(`   ❌ Error dropping ${table}:`, err.message);
+        } catch (err) {
+          const error = err as Error;
+          console.error(`   ❌ Error dropping ${table}:`, error.message);
         }
       }
     }
@@ -79,9 +80,10 @@ async function run() {
             } else {
                 console.log(`   - Executed statement`);
             }
-        } catch (err: any) {
-            console.error(`   ❌ Error executing SQL:\n${sql.substring(0, 100)}...\nReason: ${err.message}`);
-            throw err;
+        } catch (err) {
+            const error = err as Error;
+            console.error(`   ❌ Error executing SQL:\n${sql.substring(0, 100)}...\nReason: ${error.message}`);
+            throw error;
         }
     }
 

@@ -40,40 +40,46 @@ export async function checkSyncStatus(): Promise<SyncStatus> {
 
   try {
     // Get latest timestamps from all relevant tables
+    // Using a fixed historical date (2000-01-01) as fallback to prevent dynamic SYSDATE shifting
     const [timestamps] = await dbQuery<LatestTimestamps & { CURRENT_DB_TIME: string }>(`
       SELECT
-        TO_CHAR((SELECT MAX(CREATED_AT) FROM EVENT_LOGS), 'YYYY-MM-DD"T"HH24:MI:SS') as LATEST_LOG,
-        TO_CHAR((SELECT MAX(LAST_UPDATED) FROM TARGETS), 'YYYY-MM-DD"T"HH24:MI:SS') as LATEST_TARGET,
-        TO_CHAR((SELECT MAX(LAST_ACTIVITY) FROM ACTORS), 'YYYY-MM-DD"T"HH24:MI:SS') as LATEST_ACTOR,
+        TO_CHAR((SELECT MAX(CREATED_AT) FROM EVENT_LOGS), 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as LATEST_LOG,
+        TO_CHAR((SELECT MAX(LAST_UPDATED) FROM TARGETS), 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as LATEST_TARGET,
+        TO_CHAR((SELECT MAX(LAST_ACTIVITY) FROM ACTORS), 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as LATEST_ACTOR,
         TO_CHAR(GREATEST(
-          NVL((SELECT MAX(CREATED_AT) FROM EVENT_LOGS), SYSDATE - 1000),
-          NVL((SELECT MAX(LAST_UPDATED) FROM TARGETS), SYSDATE - 1000),
-          NVL((SELECT MAX(LAST_ACTIVITY) FROM ACTORS), SYSDATE - 1000)
-        ), 'YYYY-MM-DD"T"HH24:MI:SS') as LATEST_OVERALL,
-        TO_CHAR(SYSDATE, 'YYYY-MM-DD"T"HH24:MI:SS') as CURRENT_DB_TIME
+          NVL((SELECT MAX(CREATED_AT) FROM EVENT_LOGS), TO_DATE('2000-01-01', 'YYYY-MM-DD')),
+          NVL((SELECT MAX(LAST_UPDATED) FROM TARGETS), TO_DATE('2000-01-01', 'YYYY-MM-DD')),
+          NVL((SELECT MAX(LAST_ACTIVITY) FROM ACTORS), TO_DATE('2000-01-01', 'YYYY-MM-DD'))
+        ), 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as LATEST_OVERALL,
+        TO_CHAR(SYSDATE, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as CURRENT_DB_TIME
       FROM DUAL
     `);
 
     const latestActivityAt = timestamps?.LATEST_OVERALL || null;
-    const currentDbTime = timestamps?.CURRENT_DB_TIME || new Date().toISOString().replace('Z', '').split('.')[0];
+    const currentDbTime = timestamps?.CURRENT_DB_TIME || new Date().toISOString();
 
-    // No previous sync - set initial timestamp, no changes to show
+    // No previous sync - set initial checkpoint to current activity or current time
     if (!lastSyncAt) {
-      // Set initial sync timestamp so future checks work correctly
-      cookieStore.set(SYNC_COOKIE, currentDbTime, {
+      const initialPoint = latestActivityAt || currentDbTime;
+      cookieStore.set(SYNC_COOKIE, initialPoint, {
         path: "/",
         maxAge: 60 * 60 * 24 * 30,
         sameSite: "lax",
       });
       return {
         hasChanges: false,
-        lastSyncAt: currentDbTime,
+        lastSyncAt: initialPoint,
         latestActivityAt,
       };
     }
 
     // Compare timestamps
+    // String comparison works for ISO8601 strings
     const hasChanges = latestActivityAt !== null && latestActivityAt > lastSyncAt;
+
+    if (hasChanges) {
+        console.log(`[SYNC] Changes detected: Latest Data (${latestActivityAt}) > Last Sync (${lastSyncAt})`);
+    }
 
     return {
       hasChanges,
@@ -116,15 +122,15 @@ export async function getDeltaChanges(): Promise<{
       SELECT
         TO_CHAR((
           SELECT COUNT(*) FROM EVENT_LOGS
-          WHERE CREATED_AT > TO_TIMESTAMP(:lastSync, 'YYYY-MM-DD"T"HH24:MI:SS')
+          WHERE CREATED_AT > TO_TIMESTAMP(:lastSync, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
         )) as NEW_LOGS,
         TO_CHAR((
           SELECT COUNT(*) FROM TARGETS
-          WHERE LAST_UPDATED > TO_TIMESTAMP(:lastSync, 'YYYY-MM-DD"T"HH24:MI:SS')
+          WHERE LAST_UPDATED > TO_TIMESTAMP(:lastSync, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
         )) as UPDATED_TARGETS,
         TO_CHAR((
           SELECT COUNT(*) FROM ACTORS
-          WHERE LAST_ACTIVITY > TO_TIMESTAMP(:lastSync, 'YYYY-MM-DD"T"HH24:MI:SS')
+          WHERE LAST_ACTIVITY > TO_TIMESTAMP(:lastSync, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
         )) as ACTOR_CHANGES
       FROM DUAL
     `, { lastSync: lastSyncAt });
@@ -137,6 +143,41 @@ export async function getDeltaChanges(): Promise<{
   } catch {
     return null;
   }
+}
+
+/**
+ * Internal helper to complete a sync operation
+ * Invalidates caches and updates the sync cookie to the NEW checkpoint
+ */
+export async function completeSync(targetTimestamp?: string | null) {
+  let now = targetTimestamp;
+  
+  if (!now) {
+    const [dbTime] = await dbQuery<{ NOW: string }>(`SELECT TO_CHAR(SYSDATE, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as NOW FROM DUAL`);
+    now = dbTime?.NOW || new Date().toISOString();
+  }
+  
+  // Clear in-memory LRU cache
+  clearCache();
+
+  // Full invalidation
+  revalidateTag("stats", "max");
+  revalidateTag("global", "max");
+  revalidateTag("logs", "max");
+  revalidateTag("prospects", "max");
+  revalidateTag("metrics", "max");
+  revalidateTag("actors", "max");
+  revalidateTag("recent", "max");
+  revalidateTag("analytics", "max");
+
+  const cookieStore = await cookies();
+  cookieStore.set(SYNC_COOKIE, now, {
+    path: "/",
+    maxAge: 60 * 60 * 24 * 30, // 30 days
+    sameSite: "lax",
+  });
+
+  return now;
 }
 
 /**
@@ -182,45 +223,9 @@ export async function smartSync(): Promise<{
     // Get delta details before syncing
     const delta = await getDeltaChanges();
 
-    // Clear in-memory LRU cache
-    clearCache();
-
-    // Selectively invalidate cache tags based on what changed
-    if (delta) {
-      if (delta.newLogs > 0) {
-        revalidateTag("logs");
-        revalidateTag("recent");
-        revalidateTag("metrics");
-      }
-      if (delta.updatedTargets > 0) {
-        revalidateTag("prospects");
-        revalidateTag("stats");
-      }
-      if (delta.actorChanges > 0) {
-        revalidateTag("actors");
-      }
-    } else {
-      // Full invalidation if we can't determine delta
-      revalidateTag("stats");
-      revalidateTag("global");
-      revalidateTag("logs");
-      revalidateTag("prospects");
-      revalidateTag("metrics");
-      revalidateTag("actors");
-      revalidateTag("recent");
-      revalidateTag("analytics");
-    }
-
-    // Update last sync timestamp
-    const [dbTime] = await dbQuery<{ NOW: string }>(`SELECT TO_CHAR(SYSDATE, 'YYYY-MM-DD"T"HH24:MI:SS') as NOW FROM DUAL`);
-    const now = dbTime?.NOW || new Date().toISOString().replace('Z', '').split('.')[0];
-
-    const cookieStore = await cookies();
-    cookieStore.set(SYNC_COOKIE, now, {
-      path: "/",
-      maxAge: 60 * 60 * 24 * 30, // 30 days
-      sameSite: "lax",
-    });
+    // Perform the sync completion using the activity timestamp we just found
+    // This moves the checkpoint exactly to the newest record found
+    const now = await completeSync(status.latestActivityAt);
 
     const totalChanges = delta
       ? delta.newLogs + delta.updatedTargets + delta.actorChanges
@@ -261,28 +266,7 @@ export async function forceSync(): Promise<{
   }
 
   try {
-    clearCache();
-
-    // Full cache invalidation
-    revalidateTag("stats");
-    revalidateTag("global");
-    revalidateTag("logs");
-    revalidateTag("prospects");
-    revalidateTag("metrics");
-    revalidateTag("actors");
-    revalidateTag("recent");
-    revalidateTag("analytics");
-
-    const [dbTime] = await dbQuery<{ NOW: string }>(`SELECT TO_CHAR(SYSDATE, 'YYYY-MM-DD"T"HH24:MI:SS') as NOW FROM DUAL`);
-    const now = dbTime?.NOW || new Date().toISOString().replace('Z', '').split('.')[0];
-    
-    const cookieStore = await cookies();
-    cookieStore.set(SYNC_COOKIE, now, {
-      path: "/",
-      maxAge: 60 * 60 * 24 * 30,
-      sameSite: "lax",
-    });
-
+    const now = await completeSync();
     return { success: true, timestamp: now };
   } catch {
     return { success: false };

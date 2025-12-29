@@ -14,6 +14,9 @@ const jetbrainsMono = JetBrains_Mono({
   display: 'swap',
 });
 
+import { TimeProvider, TimeFormat } from "@/components/time-context";
+import { cookies } from "next/headers";
+
 export const metadata: Metadata = {
   title: "InstaCRM Command Center",
   description: "Distributed Instagram Outreach Logger & CRM Dashboard",
@@ -22,17 +25,22 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const cookieStore = await cookies();
+  const timeFormat = (cookieStore.get("time_display_format")?.value as TimeFormat) || "Ago";
+
   return (
     <html lang="en" className="dark">
       <body
         className={`${inter.variable} ${jetbrainsMono.variable} font-sans antialiased`}
       >
-        {children}
+        <TimeProvider initialFormat={timeFormat}>
+          {children}
+        </TimeProvider>
       </body>
     </html>
   );

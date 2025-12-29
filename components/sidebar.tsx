@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarNav, NavItem } from "@/components/sidebar-nav";
 import { UserProfile } from "@/components/user-profile";
+import { TimeFormatSwitcher } from "./time-format-switcher";
 
 interface SidebarProps {
     session: Session | null;
@@ -17,14 +18,17 @@ export function Sidebar({ session }: SidebarProps) {
 
   const mainNavItems: NavItem[] = [
     { name: "Overview", href: "/", icon: "LayoutDashboard" },
+    { name: "Strategic Goals", href: "/goals", icon: "Target" },
     { name: "Actors Fleet", href: "/actors", icon: "Instagram" },
+    { name: "Operators Fleet", href: "/operators", icon: "Shield" },
     { name: "Leads Explorer", href: "/leads", icon: "Users" },
     { name: "Activity Logs", href: "/logs", icon: "MessageSquare" },
     { name: "Intelligence", href: "/analytics", icon: "BarChart3" },
   ];
 
   const systemNavItems: NavItem[] = [
-    { name: "Global Settings", href: "/settings", icon: "Settings" }
+    { name: "Profile Settings", href: "/settings/profile", icon: "User" },
+    { name: "Global Settings", href: "/settings/global", icon: "Globe" }
   ];
 
   return (
@@ -62,14 +66,10 @@ export function Sidebar({ session }: SidebarProps) {
           </div>
 
           {/* System Settings */}
-          <div className="space-y-1">
-              {!isCollapsed && (
-                <p className="px-3 mb-2 text-[10px] font-semibold text-muted-foreground/50 uppercase tracking-[0.2em]">
-                    System
-                </p>
-              )}
-              <SidebarNav items={systemNavItems} isCollapsed={isCollapsed} />
-          </div>
+              <nav className="space-y-1">
+                  <SidebarNav items={systemNavItems} isCollapsed={isCollapsed} />
+                  <TimeFormatSwitcher isCollapsed={isCollapsed} />
+              </nav>
         </div>
 
         {/* Footer Area */}

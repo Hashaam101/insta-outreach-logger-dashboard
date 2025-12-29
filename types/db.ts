@@ -6,11 +6,12 @@ export type ActStatus =
   | "Suspended By Insta"
   | "Discarded";
 
-export type ElogType = 
-  | "New Tar Register"
+export type elog_type = 
+  | "Outreach"
   | "Change in Tar Info"
   | "Tar Exception Toggle"
-  | "Outreach";
+  | "User"
+  | "System";
 
 export type OprStatus = 
   | "online"

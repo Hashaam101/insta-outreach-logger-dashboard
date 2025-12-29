@@ -3,21 +3,20 @@
 import * as React from "react"
 import { Copy, Check } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
 
 interface IdTagProps {
   id: string
   className?: string
-  fullWidth?: boolean
 }
 
-export function IdTag({ id, className, fullWidth = false }: IdTagProps) {
+export function IdTag({ id, className }: IdTagProps) {
   const [copied, setCopied] = React.useState(false)
 
   if (!id) return null;
 
   const handleCopy = (e: React.MouseEvent) => {
+    e.preventDefault()
     e.stopPropagation()
     navigator.clipboard.writeText(id)
     setCopied(true)
@@ -25,31 +24,26 @@ export function IdTag({ id, className, fullWidth = false }: IdTagProps) {
     setTimeout(() => setCopied(false), 2000)
   }
 
-  // Truncate logic: Show first 8 chars (e.g., "OPR-A1B2")
-  const displayId = fullWidth ? id : (id.length > 10 ? `${id.slice(0, 10)}...` : id);
+  // Display only first 9 characters as requested
+  const displayId = id.slice(0, 9);
 
   return (
     <div 
+      onClick={handleCopy}
       className={cn(
-        "inline-flex items-center gap-1 rounded-md border border-border/50 bg-muted/50 px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+        "inline-flex items-center justify-center w-fit gap-2 rounded-lg border border-border/40 bg-muted/30 px-2.5 py-1.5 text-[10px] font-bold font-mono text-muted-foreground transition-all hover:bg-primary/10 hover:border-primary/20 hover:text-primary cursor-pointer select-none group/id-tag",
         className
       )}
       title={id}
     >
-      <span>{displayId}</span>
-      <Button
-        variant="ghost"
-        size="icon"
-        className="h-3 w-3 p-0 hover:bg-transparent text-muted-foreground hover:text-primary"
-        onClick={handleCopy}
-      >
+      <span className="leading-none inline-block">{displayId}</span>
+      <div className="flex items-center justify-center w-3 h-3 shrink-0">
         {copied ? (
-          <Check className="h-2 w-2" />
+          <Check className="h-2.5 w-2.5 text-primary" />
         ) : (
-          <Copy className="h-2 w-2" />
+          <Copy className="h-2 w-2 opacity-40 group-hover/id-tag:opacity-100 transition-opacity" />
         )}
-        <span className="sr-only">Copy ID</span>
-      </Button>
+      </div>
     </div>
   )
 }

@@ -6,7 +6,11 @@ import {
   BarChart3,
   Instagram,
   ChevronRight,
-  LucideIcon
+  LucideIcon,
+  Target,
+  User,
+  Globe,
+  Shield
 } from "lucide-react";
 
 export const IconsMap: Record<string, LucideIcon> = {
@@ -16,7 +20,11 @@ export const IconsMap: Record<string, LucideIcon> = {
   MessageSquare,
   BarChart3,
   Instagram,
-  ChevronRight
+  ChevronRight,
+  Target,
+  User,
+  Globe,
+  Shield
 };
 
 export type IconName = keyof typeof IconsMap;

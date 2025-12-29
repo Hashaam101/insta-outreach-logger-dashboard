@@ -1,4 +1,3 @@
-import { auth } from "@/auth";
 import { getPagedLeads, getCachedOperators, getCachedActors } from "@/lib/data";
 import { DataTable } from "@/components/ui/data-table";
 import { columns } from "./columns";
@@ -21,7 +20,6 @@ interface PageProps {
 }
 
 export default async function LeadsPage({ searchParams }: PageProps) {
-  const session = await auth();
   const params_data = await searchParams;
   
   const query = params_data.q || "";
@@ -31,6 +29,7 @@ export default async function LeadsPage({ searchParams }: PageProps) {
   const statuses = params_data.statuses?.split(",").filter(Boolean);
   const operators = params_data.operators?.split(",").filter(Boolean);
   const actors = params_data.actors?.split(",").filter(Boolean);
+  const timeRange = params_data.timeRange || "All Time";
 
   // Default to session operator only if NO filters are applied?
   // User requested "choose which...". 
@@ -48,9 +47,8 @@ export default async function LeadsPage({ searchParams }: PageProps) {
   // UNLESS the user explicitly clears filters (Reset). But Reset clears URL params.
   // Let's stick to: If NO filters, show MY leads.
   
-  const effectiveOperators = (operators && operators.length > 0) 
-    ? operators 
-    : (actors && actors.length > 0) ? undefined : [session?.user?.operator_name || ""];
+  // User requested: If no filters, show ALL.
+  const effectiveOperators = (operators && operators.length > 0) ? operators : undefined;
 
   // Fetch data for filters
   const [opsList, actsList] = await Promise.all([
@@ -65,9 +63,14 @@ export default async function LeadsPage({ searchParams }: PageProps) {
         query,
         statuses: statuses,
         operators: effectiveOperators,
-        actors: actors
+        actors: actors,
+        timeRange: timeRange
     }
   );
+
+  // Dedup lists for filters
+  const uniqueOperators = Array.from(new Set(opsList.map(o => o.OPR_NAME))).sort();
+  const uniqueActors = Array.from(new Set(actsList.map(a => a.ACT_USERNAME))).sort();
 
   return (
     <div className="space-y-8 pb-10">
@@ -93,8 +96,8 @@ export default async function LeadsPage({ searchParams }: PageProps) {
       <div className="grid gap-6 grid-cols-1">
         {/* Toolbar */}
         <LeadsToolbar 
-            operators={opsList.map(o => ({ label: o.OPR_NAME, value: o.OPR_NAME }))}
-            actors={actsList.map(a => ({ label: a.ACT_USERNAME, value: a.ACT_USERNAME }))}
+            operators={uniqueOperators.map(o => ({ label: o, value: o }))}
+            actors={uniqueActors.map(a => ({ label: a, value: a }))}
         />
 
         {/* Main Table */}

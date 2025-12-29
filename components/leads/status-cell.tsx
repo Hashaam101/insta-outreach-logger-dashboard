@@ -10,7 +10,8 @@ import {
     Loader2,
     DollarSign,
     Crown,
-    XCircle
+    XCircle,
+    LucideIcon
 } from "lucide-react"
 import {
   DropdownMenu,
@@ -23,7 +24,7 @@ import { updateLeadStatus } from "@/app/(dashboard)/leads/actions"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 
-const STATUS_CONFIG: Record<string, { color: string, icon: any }> = {
+const STATUS_CONFIG: Record<string, { color: string, icon: LucideIcon }> = {
   "Cold No Reply": { color: "bg-slate-500/10 text-slate-500 border-slate-500/20", icon: Clock },
   "Replied": { color: "bg-blue-500/10 text-blue-500 border-blue-500/20", icon: MessageSquare },
   "Warm": { color: "bg-amber-500/10 text-amber-500 border-amber-500/20", icon: Zap },

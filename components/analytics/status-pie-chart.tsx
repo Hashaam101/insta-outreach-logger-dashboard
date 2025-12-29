@@ -1,5 +1,6 @@
 "use client"
 
+import * as React from "react"
 import { 
     PieChart, 
     Pie, 
@@ -14,8 +15,14 @@ interface StatusPieChartProps {
 }
 
 export function StatusPieChart({ data }: StatusPieChartProps) {
+    const [mounted, setMounted] = React.useState(false)
+
+    React.useEffect(() => {
+        setMounted(true)
+    }, [])
+
     const COLORS = [
-        'var(--primary)', 
+        'oklch(0.55 0.18 285)', 
         'oklch(0.55 0.20 270)', // Light Purple
         'oklch(0.45 0.15 310)', // Dark Purple
         'oklch(0.75 0.20 250)', // Blue-ish Purple
@@ -26,6 +33,10 @@ export function StatusPieChart({ data }: StatusPieChartProps) {
         name: item.STATUS || 'Unknown',
         value: item.COUNT
     }));
+
+    if (!mounted) {
+        return <div className="h-[300px] w-full mt-4 bg-primary/5 animate-pulse rounded-2xl" />
+    }
 
     return (
         <div className="h-[300px] w-full mt-4">
@@ -47,13 +58,13 @@ export function StatusPieChart({ data }: StatusPieChartProps) {
                     </Pie>
                     <Tooltip 
                         contentStyle={{ 
-                            backgroundColor: 'var(--card)', 
-                            border: '1px solid var(--border)',
+                            backgroundColor: '#1a1a1a', 
+                            border: '1px solid rgba(255,255,255,0.1)',
                             borderRadius: '12px',
                             fontSize: '12px',
                             color: '#fff'
                         }}
-                        itemStyle={{ color: 'var(--primary)' }}
+                        itemStyle={{ color: 'oklch(0.55 0.18 285)' }}
                     />
                     <Legend 
                         verticalAlign="bottom" 

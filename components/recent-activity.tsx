@@ -2,23 +2,10 @@
 
 import * as React from "react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { MessageSquare, Calendar, User, Instagram } from "lucide-react";
+import { MessageSquare, User, Instagram } from "lucide-react";
 import { getCachedRecentLogs, OutreachLogView } from "@/lib/data";
-
-function formatTimeAgo(date: Date | string) {
-    const now = new Date();
-    const past = new Date(date);
-    const diffInMs = now.getTime() - past.getTime();
-    
-    const diffInMins = Math.floor(diffInMs / (1000 * 60));
-    const diffInHours = Math.floor(diffInMs / (1000 * 60 * 60));
-    const diffInDays = Math.floor(diffInMs / (1000 * 60 * 60 * 24));
-
-    if (diffInMins < 1) return "just now";
-    if (diffInMins < 60) return `${diffInMins}m ago`;
-    if (diffInHours < 24) return `${diffInHours}h ago`;
-    return `${diffInDays}d ago`;
-}
+import { TimeDisplay } from "./time-display";
+import { InstagramUsername } from "./ui/instagram-username";
 
 export function RecentActivity({ operatorName }: { operatorName?: string }) {
     const [logs, setLogs] = React.useState<OutreachLogView[]>([]);
@@ -47,13 +34,11 @@ export function RecentActivity({ operatorName }: { operatorName?: string }) {
                     
                     <div className="flex-1 min-w-0 space-y-1">
                         <div className="flex items-center justify-between gap-2">
-                            <p className="text-sm font-bold truncate">
-                                {log.TAR_USERNAME}
-                            </p>
-                            <span className="text-[10px] text-muted-foreground font-medium shrink-0 flex items-center gap-1">
-                                <Calendar className="h-3 w-3" />
-                                {formatTimeAgo(log.SENT_AT)}
-                            </span>
+                            <InstagramUsername username={log.TAR_USERNAME} className="text-sm" />
+                            <TimeDisplay 
+                                date={log.SENT_AT} 
+                                className="text-[10px] text-muted-foreground font-medium" 
+                            />
                         </div>
                         
                         <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed bg-background/50 p-2 rounded-lg border border-primary/5 group-hover:border-primary/10 transition-colors">
@@ -67,7 +52,10 @@ export function RecentActivity({ operatorName }: { operatorName?: string }) {
                             </div>
                             <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-blue-500/5 border border-blue-500/10">
                                 <Instagram className="h-2.5 w-2.5 text-blue-500" />
-                                <span className="text-[9px] font-bold text-blue-500/80 lowercase tracking-tight">{log.ACT_USERNAME}</span>
+                                <InstagramUsername 
+                                    username={log.ACT_USERNAME} 
+                                    className="text-[9px] font-bold text-blue-500/80 lowercase tracking-tight"
+                                />
                             </div>
                         </div>
                     </div>

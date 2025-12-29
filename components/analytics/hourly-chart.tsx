@@ -1,5 +1,6 @@
 "use client"
 
+import * as React from "react"
 import { 
     BarChart, 
     Bar, 
@@ -16,6 +17,12 @@ interface HourlyChartProps {
 }
 
 export function HourlyActivityChart({ data }: HourlyChartProps) {
+    const [mounted, setMounted] = React.useState(false)
+
+    React.useEffect(() => {
+        setMounted(true)
+    }, [])
+
     // Ensure all 24 hours are represented
     const fullData = Array.from({ length: 24 }, (_, i) => {
         const hour = i.toString().padStart(2, '0');
@@ -25,6 +32,10 @@ export function HourlyActivityChart({ data }: HourlyChartProps) {
             TOTAL: match ? match.TOTAL : 0
         };
     });
+
+    if (!mounted) {
+        return <div className="h-[200px] w-full mt-4 bg-primary/5 animate-pulse rounded-2xl" />
+    }
 
     return (
         <div className="h-[200px] w-full mt-4">
@@ -41,20 +52,20 @@ export function HourlyActivityChart({ data }: HourlyChartProps) {
                     <YAxis hide />
                     <Tooltip 
                         contentStyle={{ 
-                            backgroundColor: 'var(--card)', 
-                            border: '1px solid var(--border)',
+                            backgroundColor: '#1a1a1a', 
+                            border: '1px solid rgba(255,255,255,0.1)',
                             borderRadius: '12px',
                             fontSize: '10px',
                             color: '#fff'
                         }}
                         cursor={{ fill: 'rgba(255,255,255,0.05)' }}
-                        itemStyle={{ color: 'var(--primary)' }}
+                        itemStyle={{ color: 'oklch(0.55 0.18 285)' }}
                     />
                     <Bar dataKey="TOTAL" radius={[2, 2, 0, 0]}>
                         {fullData.map((entry, index) => (
                             <Cell 
                                 key={`cell-${index}`} 
-                                fill={entry.TOTAL > 0 ? 'var(--primary)' : 'rgba(255,255,255,0.05)'} 
+                                fill={entry.TOTAL > 0 ? 'oklch(0.55 0.18 285)' : 'rgba(255,255,255,0.05)'} 
                                 fillOpacity={0.6 + (entry.TOTAL / Math.max(...fullData.map(d => d.TOTAL || 1))) * 0.4}
                             />
                         ))}

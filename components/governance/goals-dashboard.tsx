@@ -17,28 +17,50 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { 
-    setPersonalGoal, 
-    suggestTeamGoal,
-    GoalView
-} from "@/app/actions/governance"
-import { toast } from "sonner"
-import { GoalMetric } from "@/types/db"
+        setPersonalGoal, 
+        suggestTeamGoal,
+        deleteGoal,
+        GoalView
+    } from "@/app/actions/governance"
+    import { toast } from "sonner"
+    import { GoalMetric } from "@/types/db"
+    import { ProposeGoalDialog } from "./propose-goal-dialog"
+    import { Trash2 } from "lucide-react"
 
-// Local definition since we removed AuditLog logic for now
-type AuditLogEntry = any;
+interface AuditLogEntry {
+    id: string;
+    type: string;
+    details: string;
+    timestamp: string;
+}
 
 export function GoalsDashboard({ 
     initialGoals, 
-    recentLogs 
+    recentLogs,
+    operators,
+    actors
 }: { 
     initialGoals: GoalView[], 
-    recentLogs: AuditLogEntry[] 
+    recentLogs: AuditLogEntry[],
+    operators: { id: string, name: string }[],
+    actors: { id: string, handle: string }[]
 }) {
     const [goals, setGoals] = React.useState(initialGoals)
     const [editingId, setEditingId] = React.useState<string | null>(null)
     const [editType, setEditType] = React.useState<'team' | 'personal' | null>(null)
     const [editValue, setEditValue] = React.useState<string>("")
     const [isPending, setIsPending] = React.useState(false)
+
+    const handleDelete = async (id: string) => {
+        if (!confirm("Are you sure you want to delete this goal?")) return;
+        const res = await deleteGoal(id);
+        if (res.success) {
+            toast.success("Goal deleted");
+            setGoals(prev => prev.filter(g => g.id !== id));
+        } else {
+            toast.error("Failed to delete goal");
+        }
+    }
 
     const handleSave = async () => {
         if (!editingId || !editType || isNaN(Number(editValue))) return;
@@ -75,14 +97,15 @@ export function GoalsDashboard({
         <div className="grid gap-6 md:grid-cols-12">
             {/* Goals List */}
             <Card className="md:col-span-8 border-primary/10 bg-card/40 backdrop-blur-sm">
-                <CardHeader>
+                <CardHeader className="pb-3 border-b border-primary/5 bg-primary/5 flex flex-row items-center justify-between">
                     <div className="flex items-center gap-2">
                         <Target className="h-5 w-5 text-primary" />
                         <div>
-                            <CardTitle>Goals & Performance Targets</CardTitle>
-                            <CardDescription>Democratic limits and personal overrides.</CardDescription>
+                            <CardTitle className="text-base">Strategic Performance Targets</CardTitle>
+                            <CardDescription className="text-[10px] uppercase font-bold tracking-wider">Democratic Collective Limits</CardDescription>
                         </div>
                     </div>
+                    <ProposeGoalDialog operators={operators} actors={actors} />
                 </CardHeader>
                 <CardContent className="space-y-6">
                     {goals.map((goal) => (
@@ -90,7 +113,17 @@ export function GoalsDashboard({
                             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                                 <div className="space-y-1">
                                     <h4 className="font-bold text-sm tracking-tight">{goal.metric}</h4>
-                                    <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">{goal.frequency}</p>
+                                    <div className="flex items-center gap-2">
+                                        <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">{goal.frequency}</p>
+                                        <Button 
+                                            variant="ghost" 
+                                            size="icon" 
+                                            onClick={() => handleDelete(goal.id)}
+                                            className="h-6 w-6 text-red-500/50 hover:text-red-500 hover:bg-red-500/10 rounded-lg"
+                                        >
+                                            <Trash2 className="h-3 w-3" />
+                                        </Button>
+                                    </div>
                                 </div>
                                 <div className="flex items-center gap-3">
                                     {/* Team Box */}

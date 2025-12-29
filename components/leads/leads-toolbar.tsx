@@ -23,6 +23,13 @@ const STATUS_OPTIONS = [
     { label: "Excluded", value: "Excluded" },
 ]
 
+const TIME_RANGE_OPTIONS = [
+    { label: "Today", value: "Today" },
+    { label: "This Week", value: "This Week" },
+    { label: "This Month", value: "This Month" },
+    { label: "All Time", value: "All Time" },
+]
+
 export function LeadsToolbar({ operators, actors }: LeadsToolbarProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -33,6 +40,7 @@ export function LeadsToolbar({ operators, actors }: LeadsToolbarProps) {
   const selectedStatuses = new Set(searchParams.get("statuses")?.split(",") || [])
   const selectedOperators = new Set(searchParams.get("operators")?.split(",") || [])
   const selectedActors = new Set(searchParams.get("actors")?.split(",") || [])
+  const selectedRange = new Set(searchParams.get("timeRange")?.split(",") || [])
 
   const updateUrl = (key: string, value: string | null) => {
     const params = new URLSearchParams(searchParams.toString())
@@ -62,7 +70,7 @@ export function LeadsToolbar({ operators, actors }: LeadsToolbarProps) {
     setQuery("")
   }
 
-  const isFiltered = query || selectedStatuses.size > 0 || selectedOperators.size > 0 || selectedActors.size > 0
+  const isFiltered = query || selectedStatuses.size > 0 || selectedOperators.size > 0 || selectedActors.size > 0 || selectedRange.size > 0
 
   return (
     <div className="flex flex-col gap-4">
@@ -80,6 +88,13 @@ export function LeadsToolbar({ operators, actors }: LeadsToolbarProps) {
             />
         </div>
         
+        <FacetedFilter
+            title="Time Range"
+            options={TIME_RANGE_OPTIONS}
+            selectedValues={selectedRange}
+            onSelect={(vals) => handleFilterChange("timeRange", vals)}
+        />
+
         <FacetedFilter
             title="Status"
             options={STATUS_OPTIONS}

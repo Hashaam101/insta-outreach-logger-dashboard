@@ -64,7 +64,7 @@ CREATE TABLE EVENT_LOGS (
     CONSTRAINT FK_ELG_ACT FOREIGN KEY (ACT_ID) REFERENCES ACTORS(ACT_ID),
     CONSTRAINT FK_ELG_OPR FOREIGN KEY (OPR_ID) REFERENCES OPERATORS(OPR_ID),
     CONSTRAINT FK_ELG_TAR FOREIGN KEY (TAR_ID) REFERENCES TARGETS(TAR_ID),
-    CONSTRAINT CHK_ELG_TYPE CHECK (EVENT_TYPE IN ('New Tar Register', 'Change in Tar Info', 'Tar Exception Toggle', 'Outreach'))
+    CONSTRAINT CHK_ELG_TYPE CHECK (EVENT_TYPE IN ('Outreach', 'Change in Tar Info', 'Tar Exception Toggle', 'User', 'System'))
 );
 
 -- ==========================================

@@ -43,8 +43,9 @@ async function run() {
             const table = match ? match[1] : 'unknown';
              process.stdout.write(`   - Inserted into ${table}\r`);
         }
-      } catch (err: any) {
-        console.error(`\n   ❌ Error executing SQL:\n${sql.substring(0, 50)}...\nReason: ${err.message}`);
+      } catch (err) {
+        const error = err as Error;
+        console.error(`\n   ❌ Error executing SQL:\n${sql.substring(0, 50)}...\nReason: ${error.message}`);
       }
     }
 

@@ -55,12 +55,11 @@ export function UserProfile({ session, isCollapsed }: UserProfileProps) {
             </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator className="bg-primary/5" />
-        <DropdownMenuItem asChild>
-            <Link href="/settings" className="flex items-center gap-2 py-2.5 rounded-xl cursor-pointer font-bold text-xs">
-                <UserCircle className="h-4 w-4 text-primary" /> Profile Settings
-            </Link>
-        </DropdownMenuItem>
-        <DropdownMenuItem 
+                      <DropdownMenuItem asChild>
+                          <Link href="/settings/profile" className="flex items-center gap-2 py-2.5 rounded-xl cursor-pointer font-bold text-xs">
+                              <UserCircle className="h-4 w-4 text-primary" /> Profile Settings
+                          </Link>
+                      </DropdownMenuItem>        <DropdownMenuItem 
             onClick={() => signOut()}
             className="flex items-center gap-2 py-2.5 rounded-xl cursor-pointer font-bold text-xs text-red-500 focus:text-red-500 focus:bg-red-500/10"
         >

@@ -3,7 +3,7 @@
 import * as React from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { User, Users, Loader2 } from "lucide-react"
+import { User, Users } from "lucide-react"
 import { setViewCookie } from "@/app/actions/ui"
 
 export function ViewToggle() {

@@ -12,7 +12,10 @@ import {
     UserCircle,
     Mail,
     Phone,
-    Calendar
+    Copy,
+    Check,
+    LucideIcon,
+    Activity
 } from "lucide-react"
 import { 
     DropdownMenu, 
@@ -24,7 +27,11 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
 import { TransferLeadDialog } from "@/components/governance/transfer-lead-dialog"
-import { Badge } from "@/components/ui/badge"
+import { TimeDisplay } from "@/components/time-display"
+import { toast } from "sonner"
+import { ActorPerformanceSheet } from "@/components/actors/actor-performance-sheet"
+import { fetchActorPerformance } from "@/app/(dashboard)/actors/actions"
+import { InstagramUsername } from "@/components/ui/instagram-username"
 
 export type Lead = {
   target_username: string
@@ -34,6 +41,29 @@ export type Lead = {
   phone_number?: string
   source_summary?: string
   notes?: string
+  actors_list?: string | null
+}
+
+interface PerformanceData {
+    info: {
+        ACT_STATUS: string;
+        CREATED_AT: string;
+        LAST_ACTIVITY: string;
+        TOTAL_SEATS: string;
+    };
+    volume: { LOG_DATE: string; TOTAL: string }[];
+    operatorBreakdown: { OPR_NAME: string; TOTAL: string }[];
+    recentLogs: {
+        TAR_USERNAME: string;
+        TAR_STATUS: string;
+        CONT_SOURCE: string;
+        MESSAGE_TEXT: string;
+        SENT_AT: string;
+        OPR_NAME: string;
+        ACT_USERNAME: string;
+    }[];
+    eventDistribution: { EVENT_TYPE: string; TOTAL: string }[];
+    totalDms: number;
 }
 
 const ActionsCell = ({ username }: { username: string }) => {
@@ -82,43 +112,122 @@ const ActionsCell = ({ username }: { username: string }) => {
     )
 }
 
-function formatLastUpdated(dateStr: string) {
-    if (!dateStr) return "-";
-    const date = new Date(dateStr);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+const ContactInfoCell = ({ value, icon: Icon }: { value: string, icon: LucideIcon }) => {
+    const [copied, setCopied] = React.useState(false)
 
-    if (diffDays === 0) {
-        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    } else if (diffDays < 7) {
-        return `${diffDays}d ago`;
-    } else {
-        return date.toLocaleDateString();
+    const handleCopy = (e: React.MouseEvent) => {
+        e.preventDefault()
+        e.stopPropagation()
+        navigator.clipboard.writeText(value)
+        setCopied(true)
+        toast.success("Copied to clipboard")
+        setTimeout(() => setCopied(false), 2000)
     }
+
+    return (
+        <div 
+            onClick={handleCopy}
+            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors cursor-pointer group/contact"
+        >
+            <div className="w-3.5 h-3.5 flex items-center justify-center shrink-0">
+                {copied ? (
+                    <Check className="w-3 h-3 text-primary" />
+                ) : (
+                    <>
+                        <Icon className="w-3 h-3 opacity-70 group-hover/contact:hidden" />
+                        <Copy className="w-3 h-3 hidden group-hover/contact:block opacity-100" />
+                    </>
+                )}
+            </div>
+            <span className="truncate max-w-[180px]">{value}</span>
+        </div>
+    )
+}
+
+const ActorHandle = ({ handle }: { handle: string }) => {
+    const [isSheetOpen, setIsSheetOpen] = React.useState(false)
+    const [performanceData, setPerformanceData] = React.useState<PerformanceData | null>(null)
+
+    const handleOpen = async () => {
+        try {
+            const data = await fetchActorPerformance(handle)
+            setPerformanceData(data)
+            setIsSheetOpen(true)
+        } catch {
+            toast.error("Failed to load actor info")
+        }
+    }
+
+    return (
+        <>
+            <div className="relative group/perf">
+                <InstagramUsername 
+                    username={handle} 
+                    className="text-[10px] text-primary/80 font-medium"
+                />
+                <button 
+                    onClick={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        handleOpen()
+                    }}
+                    className="absolute -right-4 top-1/2 -translate-y-1/2 opacity-0 group-hover/perf:opacity-100 transition-opacity p-1 hover:text-primary"
+                    title="View Performance"
+                >
+                    <Activity className="h-2.5 w-2.5" />
+                </button>
+            </div>
+            <ActorPerformanceSheet 
+                actorHandle={handle}
+                isOpen={isSheetOpen}
+                onOpenChange={setIsSheetOpen}
+                data={performanceData}
+            />
+        </>
+    )
+}
+
+const UsernameCell = ({ username, source, actors }: { username: string, source?: string, actors?: string | null }) => {
+    const actorsArray = actors ? actors.split(',').map(s => s.trim()) : []
+
+    return (
+        <div className="flex items-center gap-3 group/user">
+            <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                <UserCircle className="h-5 w-5 text-primary" />
+            </div>
+            <div className="flex flex-col min-w-0">
+                <InstagramUsername username={username} className="text-sm" />
+                <div className="text-[10px] text-muted-foreground truncate max-w-[180px] mt-0.5">
+                    {actorsArray.length > 0 ? (
+                        <div className="flex items-center gap-1 flex-wrap">
+                            <span>Contacted by:</span>
+                            {actorsArray.map((handle, idx) => (
+                                <React.Fragment key={handle}>
+                                    <ActorHandle handle={handle} />
+                                    {idx < actorsArray.length - 1 && <span>,</span>}
+                                </React.Fragment>
+                            ))}
+                        </div>
+                    ) : (
+                        <span title={source || "Unknown Source"}>{source || "Instagram Lead"}</span>
+                    )}
+                </div>
+            </div>
+        </div>
+    )
 }
 
 export const columns: ColumnDef<Lead>[] = [
   {
     accessorKey: "target_username",
     header: () => <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Prospect</div>,
-    cell: ({ row }) => {
-      const username = row.getValue("target_username") as string
-      const source = row.original.source_summary
-      return (
-        <div className="flex items-center gap-3">
-            <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                <UserCircle className="h-5 w-5 text-primary" />
-            </div>
-            <div className="flex flex-col min-w-0">
-                <span className="text-sm font-bold leading-none truncate">{username}</span>
-                <span className="text-[10px] text-muted-foreground truncate max-w-[150px]" title={source || "Unknown Source"}>
-                    {source || "Instagram Lead"}
-                </span>
-            </div>
-        </div>
-      )
-    },
+    cell: ({ row }) => (
+        <UsernameCell 
+            username={row.getValue("target_username")} 
+            source={row.original.source_summary} 
+            actors={row.original.actors_list}
+        />
+    )
   },
   {
     accessorKey: "email",
@@ -134,19 +243,9 @@ export const columns: ColumnDef<Lead>[] = [
         }
 
         return (
-            <div className="flex flex-col gap-1">
-                {hasEmail && (
-                    <div className="flex items-center gap-1.5 text-xs">
-                        <Mail className="h-3 w-3 text-primary/70" />
-                        <span className="truncate max-w-[180px]" title={email}>{email}</span>
-                    </div>
-                )}
-                {hasPhone && (
-                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                        <Phone className="h-3 w-3" />
-                        <span className="truncate max-w-[180px]">{phone}</span>
-                    </div>
-                )}
+            <div className="flex flex-col gap-1.5">
+                {hasEmail && <ContactInfoCell value={email} icon={Mail} />}
+                {hasPhone && <ContactInfoCell value={phone} icon={Phone} />}
             </div>
         );
     }
@@ -163,15 +262,12 @@ export const columns: ColumnDef<Lead>[] = [
   {
     accessorKey: "last_updated",
     header: () => <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Last Activity</div>,
-    cell: ({ row }) => {
-        const dateStr = row.getValue("last_updated") as string;
-        return (
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground" suppressHydrationWarning>
-                <Calendar className="h-3.5 w-3.5 opacity-70" />
-                {formatLastUpdated(dateStr)}
-            </div>
-        );
-    }
+    cell: ({ row }) => (
+        <TimeDisplay 
+            date={row.getValue("last_updated")} 
+            className="text-xs text-muted-foreground" 
+        />
+    )
   },
   {
     id: "actions",

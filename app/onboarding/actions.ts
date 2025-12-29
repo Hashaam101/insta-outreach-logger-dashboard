@@ -12,13 +12,16 @@ export async function signOutAction() {
  * Establishment of Operator Identity
  * Used during the onboarding flow.
  */
-export async function setOperatorName(rawName: string) {
+export async function setOperatorName(rawName: string, overrideEmail?: string) {
   const session = await auth();
   if (!session?.user?.email) {
     return { success: false, error: "Authentication required" };
   }
 
-  const email = session.user.email;
+  // Identity Override: Only works in DEV mode
+  const isDev = process.env.NODE_ENV === 'development';
+  const email = (isDev && overrideEmail) ? overrideEmail : session.user.email;
+  
   // Truncate to 32 chars as per schema
   const name = rawName.slice(0, 32);
 

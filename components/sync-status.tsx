@@ -3,7 +3,7 @@
 import * as React from "react"
 import { RefreshCcw, Database, Check, AlertCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { smartSync, checkSyncStatus, forceSync } from "@/app/actions/sync"
+import { smartSync, checkSyncStatus } from "@/app/actions/sync"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import {
@@ -11,32 +11,46 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { TimeDisplay } from "./time-display"
 
 export function SyncStatus() {
   const [mounted, setMounted] = React.useState(false)
-  const [lastSync, setLastSync] = React.useState<string>("--")
+  const [lastSyncTs, setLastSyncTs] = React.useState<string | null>(null)
   const [isRefreshing, setIsRefreshing] = React.useState(false)
   const [hasChanges, setHasChanges] = React.useState(false)
   const [isChecking, setIsChecking] = React.useState(false)
+  const [lastAutoSync, setLastAutoSync] = React.useState<number>(0)
 
-  // Avoid hydration mismatch by only showing time on client
+  // Initialization
   React.useEffect(() => {
     setMounted(true)
   }, [])
 
-  // Check for changes on mount and periodically
+  // Check for changes periodically
   React.useEffect(() => {
-    const checkChanges = async () => {
+    if (!mounted) return;
+
+    const checkAndAutoSync = async () => {
       setIsChecking(true)
       try {
         const status = await checkSyncStatus()
         setHasChanges(status.hasChanges)
+        
         if (status.lastSyncAt) {
-          const date = new Date(status.lastSyncAt)
-          setLastSync(date.toLocaleTimeString([], {
-            hour: '2-digit',
-            minute: '2-digit'
-          }))
+          setLastSyncTs(status.lastSyncAt)
+        }
+
+        // Auto-sync logic: If changes exist and cooldown (2 mins) passed
+        const now = Date.now()
+        if (status.hasChanges && (now - lastAutoSync > 2 * 60 * 1000)) {
+            const res = await smartSync()
+            if (res.success && res.synced) {
+                setLastAutoSync(now)
+                setHasChanges(false)
+                if (res.timestamp) {
+                    setLastSyncTs(res.timestamp)
+                }
+            }
         }
       } catch {
         // Silently fail on check
@@ -44,11 +58,10 @@ export function SyncStatus() {
       setIsChecking(false)
     }
 
-    checkChanges()
-    // Check every 2 minutes for new changes
-    const interval = setInterval(checkChanges, 2 * 60 * 1000)
+    checkAndAutoSync()
+    const interval = setInterval(checkAndAutoSync, 30 * 1000)
     return () => clearInterval(interval)
-  }, [])
+  }, [mounted, lastAutoSync])
 
   const handleSmartSync = async () => {
     setIsRefreshing(true)
@@ -56,10 +69,7 @@ export function SyncStatus() {
       const res = await smartSync()
       if (res.success) {
         if (res.synced) {
-          setLastSync(new Date().toLocaleTimeString([], {
-            hour: '2-digit',
-            minute: '2-digit'
-          }))
+          setLastSyncTs(res.timestamp || new Date().toISOString())
           setHasChanges(false)
 
           if (res.delta) {
@@ -90,26 +100,28 @@ export function SyncStatus() {
     setIsRefreshing(false)
   }
 
-  const handleForceSync = async () => {
-    setIsRefreshing(true)
-    try {
-      const res = await forceSync()
-      if (res.success) {
-        setLastSync(new Date().toLocaleTimeString([], {
-          hour: '2-digit',
-          minute: '2-digit'
-        }))
-        setHasChanges(false)
-        toast.success("Force sync completed", {
-          description: "All caches cleared and refreshed."
-        })
-      } else {
-        toast.error("Force sync failed")
-      }
-    } catch {
-      toast.error("Failed to force sync")
-    }
-    setIsRefreshing(false)
+  // SSR Placeholder
+  if (!mounted) {
+      return (
+        <div className="px-4 py-3 bg-primary/5 border border-primary/10 rounded-xl flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                    <div className="h-1.5 w-1.5 rounded-full bg-green-500" />
+                    <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest">
+                        Oracle Cloud
+                    </span>
+                </div>
+            </div>
+            <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                    <Database className="h-3 w-3 text-muted-foreground" />
+                    <span className="text-[11px] font-semibold text-foreground/80 leading-none">
+                        Synced: <span className="font-bold text-primary">--</span>
+                    </span>
+                </div>
+            </div>
+        </div>
+      )
   }
 
   return (
@@ -164,13 +176,10 @@ export function SyncStatus() {
         <div className="flex items-center gap-2">
           <Database className="h-3 w-3 text-muted-foreground" />
           <span className="text-[11px] font-semibold text-foreground/80 leading-none">
-            Synced: <span className={cn(
-              "font-bold",
-              hasChanges ? "text-amber-500" : "text-primary"
-            )}>{mounted ? lastSync : "--"}</span>
+            Synced: <TimeDisplay date={lastSyncTs} showIcon={false} className="font-bold text-primary" />
           </span>
         </div>
-        {!hasChanges && mounted && lastSync !== "--" && (
+        {!hasChanges && lastSyncTs && (
           <Check className="h-3 w-3 text-green-500" />
         )}
       </div>

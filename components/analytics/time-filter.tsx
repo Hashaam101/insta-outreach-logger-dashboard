@@ -2,7 +2,6 @@
 
 import { useRouter, useSearchParams } from "next/navigation"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Calendar } from "lucide-react"
 
 export function TimeFilter() {
   const router = useRouter()

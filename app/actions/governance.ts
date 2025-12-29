@@ -4,12 +4,16 @@ import { auth } from "@/auth";
 import { dbQuery, dbQuerySingle } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { GoalMetric, GoalFrequency } from "@/types/db";
+import { completeSync } from "./sync";
+import { getCachedOperators, getCachedActors } from "@/lib/data";
+
+export { getCachedOperators, getCachedActors };
 
 /**
  * 1. Transfer Actor Ownership
- * Updates the OPR_ID in the ACTORS table.
+ * Updates the OPR_ID for a specific ACT_ID record.
  */
-export async function transferActor(actorHandle: string, newOperatorName: string) {
+export async function transferActor(actorId: string, newOperatorName: string) {
     const session = await auth();
     if (!session?.user?.operator_name) throw new Error("Unauthorized");
 
@@ -22,15 +26,108 @@ export async function transferActor(actorHandle: string, newOperatorName: string
 
         if (!newOp) throw new Error(`Operator ${newOperatorName} not found`);
 
-        // 2. Update Actor
+        // 2. Update Actor Record
         await dbQuery(
-            `UPDATE ACTORS SET OPR_ID = :new_id WHERE ACT_USERNAME = :handle`,
-            { new_id: newOp.OPR_ID, handle: actorHandle }
+            `UPDATE ACTORS SET OPR_ID = :new_id WHERE ACT_ID = :id`,
+            { new_id: newOp.OPR_ID, id: actorId }
         );
 
-        console.log(`AUDIT: Actor ${actorHandle} transferred to ${newOperatorName} by ${session.user.operator_name}`);
+        console.log(`AUDIT: Actor record ${actorId} transferred to ${newOperatorName} by ${session.user.operator_name}`);
 
+        await completeSync();
+        
         revalidatePath('/settings');
+        revalidatePath('/actors');
+        return { success: true };
+    } catch (e: unknown) {
+        const err = e as Error;
+        return { success: false, error: err.message };
+    }
+}
+
+/**
+ * 1b. Share Actor Ownership
+ * Inserts a NEW record in ACTORS table for an existing ACT_USERNAME.
+ */
+export async function shareActor(actorHandle: string, newOperatorName: string) {
+    const session = await auth();
+    if (!session?.user?.operator_name) throw new Error("Unauthorized");
+
+    try {
+        const newOp = await dbQuerySingle<{ OPR_ID: string }>(
+            `SELECT OPR_ID FROM OPERATORS WHERE OPR_NAME = :name`,
+            { name: newOperatorName }
+        );
+
+        if (!newOp) throw new Error(`Operator ${newOperatorName} not found`);
+
+        // Check if already shared with this operator
+        const existing = await dbQuerySingle(
+            `SELECT ACT_ID FROM ACTORS WHERE ACT_USERNAME = :handle AND OPR_ID = :opr`,
+            { handle: actorHandle, opr: newOp.OPR_ID }
+        );
+
+        if (existing) throw new Error("Actor is already assigned to this operator");
+
+        const actId = `ACT-${Date.now().toString(16).slice(-8).toUpperCase()}`;
+
+        await dbQuery(
+            `INSERT INTO ACTORS (ACT_ID, ACT_USERNAME, OPR_ID, ACT_STATUS, CREATED_AT, LAST_ACTIVITY)
+             VALUES (:id, :handle, :opr, 'Active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+            { id: actId, handle: actorHandle, opr: newOp.OPR_ID }
+        );
+
+        console.log(`AUDIT: Actor ${actorHandle} shared with ${newOperatorName} by ${session.user.operator_name}`);
+
+        await completeSync();
+
+        revalidatePath('/actors');
+        return { success: true };
+    } catch (e: unknown) {
+        const err = e as Error;
+        return { success: false, error: err.message };
+    }
+}
+
+/**
+ * 1c. Update Actor Status
+ */
+export async function updateActorStatus(actorId: string, newStatus: string) {
+    const session = await auth();
+    if (!session?.user?.operator_name) throw new Error("Unauthorized");
+
+    try {
+        const current = await dbQuerySingle<{ ACT_STATUS: string, ACT_USERNAME: string }>(
+            `SELECT ACT_STATUS, ACT_USERNAME FROM ACTORS WHERE ACT_ID = :id`,
+            { id: actorId }
+        );
+
+        await dbQuery(
+            `UPDATE ACTORS SET ACT_STATUS = :status WHERE ACT_ID = :id`,
+            { status: newStatus, id: actorId }
+        );
+
+        const op = await dbQuerySingle<{ OPR_ID: string }>(
+            `SELECT OPR_ID FROM OPERATORS WHERE OPR_NAME = :n`, 
+            { n: session.user.operator_name }
+        );
+
+        if (op && current) {
+            const elgId = `ELG-${Date.now().toString(16).slice(-6).toUpperCase()}${Math.floor(Math.random()*100)}`;
+            await dbQuery(
+                `INSERT INTO EVENT_LOGS (ELG_ID, EVENT_TYPE, ACT_ID, OPR_ID, DETAILS, CREATED_AT)
+                 VALUES (:id, 'User', :act, :opr, :details, SYSTIMESTAMP)`,
+                { 
+                    id: elgId, 
+                    act: actorId, 
+                    opr: op.OPR_ID,
+                    details: `Actor Change = [Status (@${current.ACT_USERNAME}): ${current.ACT_STATUS} -> ${newStatus}]`
+                }
+            );
+        }
+
+        await completeSync();
+
         revalidatePath('/actors');
         return { success: true };
     } catch (e: unknown) {
@@ -69,6 +166,8 @@ export async function transferLead(targetUsername: string, newActorHandle: strin
                 details: `[Transfer] Ownership claimed by @${newActorHandle}`
             }
         );
+
+        await completeSync();
 
         revalidatePath('/leads');
         return { success: true };
@@ -198,6 +297,178 @@ export async function getGoalsDashboardData(): Promise<GoalView[]> {
         }));
     } catch (e) {
         console.error("Goals fetch failed:", e);
+        return [];
+    }
+}
+
+/**
+ * 7. Propose Goal
+ */
+export async function proposeGoal(data: {
+    metric: GoalMetric;
+    value: number;
+    frequency: GoalFrequency;
+    assignedToOpr?: string | null;
+    assignedToAct?: string | null;
+}) {
+    const session = await auth();
+    if (!session?.user?.operator_name) throw new Error("Unauthorized");
+
+    try {
+        const op = await dbQuerySingle<{ OPR_ID: string }>(`SELECT OPR_ID FROM OPERATORS WHERE OPR_NAME = :n`, { n: session.user.operator_name });
+        if (!op) throw new Error("Operator not found");
+
+        const goalId = `GOL-${Date.now().toString(16).slice(-8).toUpperCase()}`;
+
+        await dbQuery(`
+            INSERT INTO GOALS (GOAL_ID, METRIC, TARGET_VALUE, FREQUENCY, STATUS, SUGGESTED_BY, ASSIGNED_TO_OPR, ASSIGNED_TO_ACT, CREATED_AT, START_DATE)
+            VALUES (:id, :metric, :val, :freq, 'Pending Suggestion', :by, :opr, :act, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        `, {
+            id: goalId,
+            metric: data.metric,
+            val: data.value,
+            freq: data.frequency,
+            by: op.OPR_ID,
+            opr: data.assignedToOpr || null,
+            act: data.assignedToAct || null
+        });
+
+        revalidatePath('/goals');
+        return { success: true };
+    } catch (e: unknown) {
+        const err = e as Error;
+        return { success: false, error: err.message };
+    }
+}
+
+/**
+ * 8. Propose Rule
+ */
+export async function proposeRule(data: {
+    type: string;
+    metric: string;
+    limitValue: number;
+    window: number;
+    assignedToOpr?: string | null;
+    assignedToAct?: string | null;
+}) {
+    const session = await auth();
+    if (!session?.user?.operator_name) throw new Error("Unauthorized");
+
+    try {
+        const op = await dbQuerySingle<{ OPR_ID: string }>(`SELECT OPR_ID FROM OPERATORS WHERE OPR_NAME = :n`, { n: session.user.operator_name });
+        if (!op) throw new Error("Operator not found");
+
+        const ruleId = `RUL-${Date.now().toString(16).slice(-8).toUpperCase()}`;
+
+        await dbQuery(`
+            INSERT INTO RULES (RULE_ID, TYPE, METRIC, LIMIT_VALUE, TIME_WINDOW_SEC, STATUS, SUGGESTED_BY, ASSIGNED_TO_OPR, ASSIGNED_TO_ACT, CREATED_AT)
+            VALUES (:id, :type, :metric, :val, :window, 'Pending Suggestion', :by, :opr, :act, CURRENT_TIMESTAMP)
+        `, {
+            id: ruleId,
+            type: data.type,
+            metric: data.metric,
+            val: data.limitValue,
+            window: data.window,
+            by: op.OPR_ID,
+            opr: data.assignedToOpr || null,
+            act: data.assignedToAct || null
+        });
+
+        revalidatePath('/goals');
+        return { success: true };
+    } catch (e: unknown) {
+        const err = e as Error;
+        return { success: false, error: err.message };
+    }
+}
+
+/**
+ * 9. Delete Goal
+ */
+export async function deleteGoal(id: string) {
+    const session = await auth();
+    if (!session?.user?.operator_name) throw new Error("Unauthorized");
+
+    try {
+        await dbQuery(`DELETE FROM GOALS WHERE GOAL_ID = :id`, { id });
+        revalidatePath('/goals');
+        return { success: true };
+    } catch (e: unknown) {
+        return { success: false, error: (e as Error).message };
+    }
+}
+
+/**
+ * 10. Delete Rule
+ */
+export async function deleteRule(id: string) {
+    const session = await auth();
+    if (!session?.user?.operator_name) throw new Error("Unauthorized");
+
+    try {
+        await dbQuery(`DELETE FROM RULES WHERE RULE_ID = :id`, { id });
+        revalidatePath('/goals');
+        return { success: true };
+    } catch (e: unknown) {
+        return { success: false, error: (e as Error).message };
+    }
+}
+
+export interface RuleView {
+    id: string;
+    type: string;
+    metric: string;
+    limitValue: number;
+    window: number;
+    severity: string;
+    assignedTo?: string;
+    actorHandle?: string;
+}
+
+/**
+ * 6. Get Rules Dashboard Data
+ */
+export async function getRulesDashboardData(): Promise<RuleView[]> {
+    try {
+        const rules = await dbQuery<{
+            RULE_ID: string;
+            TYPE: string;
+            METRIC: string;
+            LIMIT_VALUE: number;
+            TIME_WINDOW_SEC: number;
+            SEVERITY: string;
+            OPR_NAME?: string;
+            ACT_USERNAME?: string;
+        }>(`
+            SELECT 
+                r.RULE_ID, 
+                r.TYPE, 
+                r.METRIC, 
+                r.LIMIT_VALUE, 
+                r.TIME_WINDOW_SEC, 
+                r.SEVERITY,
+                o.OPR_NAME,
+                a.ACT_USERNAME
+            FROM RULES r
+            LEFT JOIN OPERATORS o ON r.ASSIGNED_TO_OPR = o.OPR_ID
+            LEFT JOIN ACTORS a ON r.ASSIGNED_TO_ACT = a.ACT_ID
+            WHERE r.STATUS = 'Active'
+            ORDER BY r.CREATED_AT DESC
+        `);
+
+        return rules.map((r) => ({
+            id: r.RULE_ID,
+            type: r.TYPE,
+            metric: r.METRIC,
+            limitValue: r.LIMIT_VALUE,
+            window: r.TIME_WINDOW_SEC,
+            severity: r.SEVERITY,
+            assignedTo: r.OPR_NAME,
+            actorHandle: r.ACT_USERNAME
+        }));
+    } catch (e) {
+        console.error("Rules fetch failed:", e);
         return [];
     }
 }

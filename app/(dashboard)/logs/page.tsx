@@ -1,41 +1,52 @@
-import { auth } from "@/auth";
-import { getPagedLogs } from "@/lib/data";
+import { getPagedLogs, getCachedOperators, getCachedActors } from "@/lib/data";
 import { DataTable } from "@/components/ui/data-table";
 import { columns } from "./columns";
 import { Clock, ShieldCheck } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { LogsScopeFilter } from "@/components/logs/logs-scope-filter";
+import { LogsToolbar } from "@/components/logs/logs-toolbar";
 
-type SearchParams = Promise<{ [key: string]: string | string[] | undefined }>
+interface PageProps {
+  searchParams: Promise<{ 
+      q?: string;
+      operators?: string;
+      actors?: string;
+      page?: string;
+  }>;
+}
 
-export default async function LogsPage(props: {
-  searchParams: SearchParams
-}) {
-  const session = await auth();
-  const searchParams = await props.searchParams;
-  const page = Number(searchParams.page) || 1;
+export default async function LogsPage({ searchParams }: PageProps) {
+  const params_data = await searchParams;
+  const page = Number(params_data.page) || 1;
   const pageSize = 20;
 
-  // Determine filters based on scope
-  const scope = typeof searchParams.scope === 'string' ? searchParams.scope : 'operator';
-  const actorParam = typeof searchParams.actor === 'string' ? searchParams.actor : undefined;
-  
-  let operatorFilter: string | undefined = undefined;
-  let actorFilter: string | undefined = undefined;
+  const query = params_data.q || "";
+  const selectedOperators = params_data.operators?.split(",").filter(Boolean);
+  const selectedActors = params_data.actors?.split(",").filter(Boolean);
+  const selectedTypes = params_data.types?.split(",").filter(Boolean);
+  const timeRange = params_data.timeRange || "All Time";
 
-  if (scope === 'operator') {
-    operatorFilter = session?.user?.operator_name;
-  } else if (scope === 'actor' && actorParam) {
-    actorFilter = actorParam;
-  }
-  // if scope === 'all', filters remain undefined
+  // User requested: If no filters, show ALL.
+  const effectiveOperators = (selectedOperators && selectedOperators.length > 0) ? selectedOperators : undefined;
+
+  // Fetch lists for filters
+  const [opsList, actsList] = await Promise.all([
+    getCachedOperators(),
+    getCachedActors()
+  ]);
+
+  // Dedup lists for filters
+  const uniqueOperators = Array.from(new Set(opsList.map(o => o.OPR_NAME))).sort();
+  const uniqueActors = Array.from(new Set(actsList.map(a => a.ACT_USERNAME))).sort();
 
   const { data: logs, metadata } = await getPagedLogs(
     page,
     pageSize,
     {
-      operatorName: operatorFilter,
-      actorUsername: actorFilter
+      operatorNames: effectiveOperators,
+      actorUsernames: selectedActors,
+      eventTypes: selectedTypes,
+      query: query,
+      timeRange: timeRange
     }
   );
 
@@ -55,8 +66,13 @@ export default async function LogsPage(props: {
       </div>
 
       <div className="grid gap-6 grid-cols-1">
+        <LogsToolbar 
+            operators={uniqueOperators.map(o => ({ label: o, value: o }))}
+            actors={uniqueActors.map(a => ({ label: a, value: a }))}
+        />
+
         <Card className="border-primary/10 bg-card/40 backdrop-blur-sm border-2 rounded-2xl overflow-hidden">
-          <CardHeader className="border-b border-primary/5 bg-primary/5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+          <CardHeader className="border-b border-primary/5 bg-primary/5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 py-4">
             <div className="flex items-center gap-2">
                 <Clock className="h-4 w-4 text-primary" />
                 <div>
@@ -66,8 +82,6 @@ export default async function LogsPage(props: {
                     </CardDescription>
                 </div>
             </div>
-            
-            <LogsScopeFilter operatorName={session?.user?.operator_name} />
           </CardHeader>
           <CardContent className="p-0">
             <DataTable 

@@ -73,8 +73,7 @@ export default async function DashboardPage({
             <p className="text-muted-foreground text-sm max-w-md">
                 {view === "my" 
                     ? `Viewing your personal outreach performance.` 
-                    : "Comprehensive intelligence from the entire fleet."}
-            </p>
+                                              : "Comprehensive intelligence from the entire fleet."}            </p>
         </div>
         
         <div className="flex flex-wrap items-center gap-3">
