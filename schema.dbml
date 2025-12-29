@@ -1,5 +1,18 @@
 // ==========================================
 // ==========================================
+//           SYSTEM CONFIGURATION
+// ==========================================
+// ==========================================
+
+// TIMEZONE PROTOCOL:
+// - Database (Oracle ATP) is strictly GMT+0 (UTC).
+// - All TIMESTAMP columns must store UTC time only.
+// - Use SYSTIMESTAMP or SYSDATE for DB-generated times.
+// - Application Layer: All JS Date objects must be converted to UTC before DB interaction.
+// - UI Layer: Conversion to User's Local Time (e.g., GMT+5) must happen at the edge (last layer of rendering).
+
+// ==========================================
+// ==========================================
 //           ENUMERATIONS (ENUMS)
 // ==========================================
 // ==========================================
@@ -11,10 +24,11 @@ Enum "act_status" {
     "Discarded"
 }
 Enum "elog_type" {
-    "New Tar Register"
+    "Outreach"
     "Change in Tar Info"
     "Tar Exception Toggle"
-    "Outreach"
+    "User"
+    "System"
 }
 Enum "opr_status" {
     "online"
@@ -74,6 +88,10 @@ Table "ACTORS" {
   "ACT_STATUS" act_status [not null]
   "CREATED_AT" TIMESTAMP [not null]
   "LAST_ACTIVITY" TIMESTAMP [not null, note: 'Should be same as Created_At if no activity is visible in logs.']
+  
+  Indexes {
+    (ACT_USERNAME, OPR_ID) [unique]
+  }
 }
 Table "TARGETS" {
   // Contact Info
